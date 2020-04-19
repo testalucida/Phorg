@@ -83,27 +83,9 @@ private:
 	int _X;
 }; //class Box
 
-class ImageBox : public Fl_Group {
-public:
-	ImageBox( int x, int y, int w, int h ) : Fl_Group( x, y, w, h ) {
-		_box = new Box( x, y, w, h );
-		resizable( _box );
-		end();
-	}
-	Box* getBox() {
-		return _box;
-	}
-
-	void resize( int x, int y, int w, int h ) {
-		Fl_Group::resize( x, y, w, h );
-		fprintf( stderr, "ImageBox::resize: %d, %d, %d, %d\n", x, y, w, h );
-	}
-private:
-	Box* _box;
-};
-
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//const long MAX_MEM_USAGE = 1000000000;
+const long MAX_MEM_USAGE = 100000000;
 //+++++++++++++++++    PHOTOBOX   +++++++++++++++++++++++++++
 class PhotoBox : public Fl_Box {
 public:
@@ -133,6 +115,12 @@ public:
 	void setSelected( bool selected ) {
 		_isSelected = selected;
 		redraw();
+	}
+
+	void getPhotoPathnFile( string& pathnfile ) const {
+		pathnfile = _folder;
+		pathnfile.append( "/" );
+		pathnfile.append( _file );
 	}
 
 //	int handle( int evt ) {
@@ -191,6 +179,7 @@ private:
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //++++++++++++++++++    SCROLL    +++++++++++++++++++++++++++
 typedef void (*ResizeCallback) ( int x, int y, int w, int h, void* data );
+typedef void (*ScrollCallback) ( int xpos, int ypos, void* data );
 
 class Scroll : public Fl_Scroll {
 public:
@@ -205,6 +194,11 @@ public:
 		_resize_cb_data = data;
 	}
 
+	void setScrollCallback( ScrollCallback cb, void* data ) {
+		_scroll_cb = cb;
+		_scroll_cb_data = data;
+	}
+
 	void resize( int x, int y, int w, int h ) {
 		Fl_Scroll::resize( x, y, w, h );
 		if( _resize_cb ) {
@@ -214,6 +208,7 @@ public:
 
 	int handle( int evt ) {
 		int rc = Fl_Scroll::handle( evt );
+		//fprintf( stderr, "Scroll::handle -- evt = %d, %s\n", evt, fl_eventnames[evt] );
 		switch( evt ) {
 		case FL_PUSH: {
 			unselectAll();
@@ -222,14 +217,37 @@ public:
 			if( box ) {
 				box->setSelected( true );
 			}
-			rc = 1;
-			break;
+			_pushed = true;
+			return 1;
 		}
+		case FL_MOVE:
+			if( _pushed ) {
+				doScrollCallback();
+				_pushed = false;
+			}
+			break;
+		case FL_LEAVE:
+		case FL_RELEASE:
+		case FL_MOUSEWHEEL:
+			doScrollCallback();
+			break;
 		default:
 			break;
 		}
 
 		return rc;
+	}
+
+	void doScrollCallback() {
+		fprintf( stderr, "y(): %d, yposition(): %d\n", y(), yposition() );
+		int ypos = yposition();
+		int xpos = xposition();
+		if( _scroll_cb && ( ypos != _ypos_old || xpos != _xpos_old ) ) {
+			(_scroll_cb)( xpos, ypos, _scroll_cb_data );
+			_xpos_old = xpos;
+			_ypos_old = ypos;
+		}
+
 	}
 
 	void unselectAll() {
@@ -244,6 +262,10 @@ public:
 private:
 	ResizeCallback _resize_cb = NULL;
 	void* _resize_cb_data = NULL;
+	ScrollCallback _scroll_cb = NULL;
+	void* _scroll_cb_data = NULL;
+	bool _pushed = false;
+	int _ypos_old = 0, _xpos_old = 0;
 };
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //++++++++++++++++++++++++  TOOLBAR  +++++++++++++++++++++++++
@@ -284,14 +306,24 @@ private:
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //*+++++++++++++++++++++++  CONTROLLER  +++++++++++++++++++++++
 class Controller {
+private:
+	struct PhotoInfo {
+		PhotoBox* box = NULL;
+	};
 public:
 	Controller( Scroll* scroll ) : _scroll(scroll) {
-
+		_scroll->setResizeCallback( onCanvasResize_static, this );
+		_scroll->setScrollCallback( onScrolled_static, this );
 	}
 
 	static void onCanvasResize_static( int x, int y, int w, int h, void* data ) {
 		Controller* pThis = (Controller*)data;
 		pThis->layoutPhotos( x, y, w, h );
+	}
+
+	static void onScrolled_static( int xpos, int ypos, void* data ) {
+		Controller* pThis = (Controller*)data;
+		pThis->checkLoadPhotosAfterScrolling( xpos, ypos );
 	}
 
 	static void onOpen_static( Fl_Widget*, void* data ) {
@@ -351,43 +383,13 @@ public:
 			throw runtime_error( msg );
 		}
 	}
-//private:
-	/** obsolete **/
-//	void addPicture( const char* folder, const char* filename ) {
-//		//todo: differentiate jpg and png
-//		int x, y;
-//		if( !_lastBox ) {
-//			x = _scroll->x() + _spacing_x;
-//			y = _scroll->y() + _spacing_y;
-//		} else {
-//			x = _lastBox->x() + _lastBox->w() + _spacing_x;
-//			y = _lastBox->y();
-//			if( x >= ( _scroll->x() + _scroll->w() ) ) {
-//				x = _scroll->x() + _spacing_x;
-//				y += ( _lastBox->h() + _spacing_y );
-//			}
-//		}
-//		_lastBox = new PhotoBox( x, y, _box_w, _box_h, folder, filename );
-//		string pathnfile = folder;
-//		pathnfile.append( "/" );
-//		pathnfile.append( filename );
-//		Fl_JPEG_Image* jpg = new Fl_JPEG_Image( pathnfile.c_str() );
-//		jpg->scale( _box_w, _box_h, 1, 1 );
-//		_lastBox->image( jpg );
-//		_photos.push_back( _lastBox );
-//
-//		_scroll->add( _lastBox );
-//		_scroll->redraw();
-//	}
 
 	void addPhoto( const char* folder, const char* filename ) {
 		PhotoBox* box = new PhotoBox( 1, 1, _box_w, _box_h, folder, filename );
-		string pathnfile = folder;
-		pathnfile.append( "/" );
-		pathnfile.append( filename );
-		Fl_JPEG_Image* jpg = new Fl_JPEG_Image( pathnfile.c_str() );
-		jpg->scale( _box_w, _box_h, 1, 1 );
-		box->image( jpg );
+
+		if( _usedBytes < MAX_MEM_USAGE ) {
+			loadPhoto( box );
+		}
 		_photos.push_back( box );
 	}
 
@@ -412,6 +414,65 @@ public:
 		_scroll->redraw();
 	}
 
+	/**
+	 * By scrolling a row of PhotoBoxes might come in view whose images are not loaded.
+	 * We have to unload the PhotoBoxes in an upper row and then load the boxes of the
+	 * row coming in sight.
+	 * @params xpos, ypos: scroll amount. E.g. ypos = 16 means that Fl_Scroll is extending
+	 * the northern border for 16 pixels.
+	 */
+	void checkLoadPhotosAfterScrolling( int xpos, int ypos ) {
+		//check the bottommost y value we can see:
+		int ymax = _scroll->y() + _scroll->h() + ypos;
+		//get the PhotoBoxes containing ymax and load them if necessary:
+		int row_y = 0;
+		vector<PhotoBox*> to_load;
+		for( auto ph : _photos ) {
+			if( ph->y() < ymax && ( ph->y() + ph->h() ) >= ymax ) {
+				if( row_y == 0 ) row_y = ph->y();
+				if( row_y != ph->y() ) break;
+				if( !ph->image() ) {
+					to_load.push_back( ph );
+				}
+			}
+		}
+
+		if( to_load.size() > 0 ) {
+			//we have photos to reload, so unload the topmost
+			//row of PhotoBoxes with loaded photos
+			row_y = 0;
+			for( auto ph : _photos ) {
+				Fl_Image* img;
+				if( ( img = ph->image() ) != NULL ) {
+					_usedBytes -= getPhotoSize( img );
+					delete img;
+					ph->image( NULL );
+				}
+			}
+		}
+
+		//...and load photos contained in vector to_load:
+		for( auto ph : to_load ) {
+			loadPhoto( ph );
+		}
+
+		_scroll->redraw();
+	}
+
+private:
+	void loadPhoto( PhotoBox* box ) {
+		string pathnfile;
+		box->getPhotoPathnFile( pathnfile );
+		Fl_JPEG_Image* jpg = new Fl_JPEG_Image( pathnfile.c_str() );
+		jpg->scale( _box_w, _box_h, 1, 1 );
+		_usedBytes += getPhotoSize( jpg );
+		box->image( jpg );
+	}
+
+	inline long getPhotoSize( Fl_Image* img ) {
+		return ( img->data_w() * img->data_h() * img->d() ) ;
+	}
+
 private:
 	Scroll* _scroll;
 	int _box_w = 400;
@@ -420,6 +481,7 @@ private:
 	int _spacing_y = 5;
 	//PhotoBox* _lastBox = NULL;
 	std::vector<PhotoBox*> _photos;
+	long _usedBytes = 0;
 };
 //*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
