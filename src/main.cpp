@@ -18,6 +18,8 @@
 
 #include "std.h"
 
+#include <my/StringHelper.h>
+
 #include <dirent.h>
 #include <stdexcept>
 
@@ -53,7 +55,7 @@ public:
 
 	int handle( int evt ) {
 		int rc = DragBox::handle( evt );
-		const char* evtname = fl_eventnames[evt];
+		//const char* evtname = fl_eventnames[evt];
 		//fprintf( stderr, "evt: %d -- %s\n", evt, evtname );
 		switch( evt ) {
 		case FL_MOUSEWHEEL: { //FL_MOUSEWHEEL - 19
@@ -84,8 +86,8 @@ private:
 }; //class Box
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//const long MAX_MEM_USAGE = 1000000000;
-const long MAX_MEM_USAGE = 100000000;
+const long MAX_MEM_USAGE = 800000000;
+//const long MAX_MEM_USAGE = 100000000;
 //+++++++++++++++++    PHOTOBOX   +++++++++++++++++++++++++++
 class PhotoBox : public Fl_Box {
 public:
@@ -102,6 +104,13 @@ public:
 
 		box( FL_FLAT_BOX );
 		color( FL_LIGHT1 );
+	}
+
+	~PhotoBox() {
+		Fl_Image* img;
+		if( ( img = image() ) != NULL ) {
+			delete img;
+		}
 	}
 
 	void resize( int x, int y, int w, int h ) {
@@ -239,7 +248,7 @@ public:
 	}
 
 	void doScrollCallback() {
-		fprintf( stderr, "y(): %d, yposition(): %d\n", y(), yposition() );
+		//fprintf( stderr, "y(): %d, yposition(): %d\n", y(), yposition() );
 		int ypos = yposition();
 		int xpos = xposition();
 		if( _scroll_cb && ( ypos != _ypos_old || xpos != _xpos_old ) ) {
@@ -269,6 +278,11 @@ private:
 };
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //++++++++++++++++++++++++  TOOLBAR  +++++++++++++++++++++++++
+static const char* SYMBOL_LAST = "@>|";
+static const char* SYMBOL_NEXT = "@>";
+static const char* SYMBOL_PREVIOUS = "@<";
+static const char* SYMBOL_FIRST = "@|<";
+
 class ToolBar : public Fl_Group {
 public:
 	ToolBar( int x, int y, int w ) : Fl_Group( x, y, w, 34 ) {
@@ -279,19 +293,86 @@ public:
 		end();
 	}
 
-	void addButton( const char** xpm = 0, const char *tooltip = 0,
-			       Fl_Callback *cb=0, void *data=0 )
+	/**
+	 * Adds a button to the right side of the most right button on the left side of the toolbar.
+	 */
+	void addButton( const char** xpm, const char *tooltip = 0,
+			        Fl_Callback *cb=0, void *data=0 )
+	{
+		Position xy = getXYfromLeft();
+		Fl_Button* b = createButton( xy.x, xy.y, tooltip, cb, data );
+
+		Fl_Pixmap* img = new Fl_Pixmap( xpm );
+		b->image( img );
+		_mostRightLeftButton = b;
+	}
+
+	void addButton( const char* symbol, Fl_Align align, const char *tooltip = 0,
+				    Fl_Callback *cb=0, void *data=0 )
+	{
+		Position xy;
+		if( align == FL_ALIGN_LEFT ) {
+			xy = getXYfromLeft();
+		} else if( align == FL_ALIGN_RIGHT ) {
+			xy = getXYfromRight();
+		} else {
+			throw runtime_error( "ToolBar::addButton: FL_ALIGN_CENTER not yet implemented" );
+		}
+		Fl_Button* btn = createButton( xy.x, xy.y, tooltip, cb, data );
+		btn->copy_label( symbol );
+
+		if( align == FL_ALIGN_LEFT ) {
+			_mostRightLeftButton = btn;
+		} else { //FL_ALIGN_RIGHT
+			_mostLeftRightButton = btn;
+		}
+	}
+
+	void setPageButtonEnabled( const char* buttonsymbol, bool enable ) {
+		for( int i = 0, imax = children(); i < imax; i++ ) {
+			Fl_Button* btn = dynamic_cast<Fl_Button*>( child(i) );
+			if( btn ) {
+				const char* label = btn->label();
+				if( label ) {
+					if( !strcmp( label, buttonsymbol ) ) {
+						if( enable ) {
+							btn->activate();
+						} else {
+							btn->deactivate();
+						}
+					}
+				} //if( label )
+			} //if( btn )
+		} //for
+	}
+
+	void setAllPageButtonsEnabled( bool enable ) {
+		for ( int i = 0, imax = children(); i < imax; i++ ) {
+			Fl_Button *btn = dynamic_cast<Fl_Button*>( child( i ) );
+			if ( btn ) {
+				const char *label = btn->label();
+				if ( label ) {
+					if ( label[0] == '@') {
+						if ( enable ) {
+							btn->activate();
+						} else {
+							btn->deactivate();
+						}
+					}
+				} //if( label )
+			} //if( btn )
+		} //for
+	}
+
+private:
+	Fl_Button* createButton( int x, int y, const char *tooltip = 0,
+			Fl_Callback *cb = 0, void *data = 0 )
 	{
 		begin();
-		Fl_Button *b = new Fl_Button( 4, 1, 32, 32 );
+		Fl_Button *b = new Fl_Button( x, y, _buttonsize, _buttonsize );
 		b->box( FL_FLAT_BOX );    // buttons won't have 'edges'
 		b->color( FL_DARK2 );
 		b->clear_visible_focus();
-
-		if( xpm ) {
-			Fl_Pixmap* img = new Fl_Pixmap( xpm );
-			b->image( img );
-		}
 
 		if ( tooltip )
 			b->tooltip( tooltip );
@@ -300,38 +381,89 @@ public:
 			b->callback( cb, data );
 
 		end();
+		return b;
+	}
+
+	Position getXYfromLeft() const {
+		Position pos;
+		pos.x = _mostRightLeftButton ? _mostRightLeftButton->x() + _mostRightLeftButton->w() + _spacing_x
+				                     : _spacing_x;
+		pos.y = 1;
+		return pos;
+	}
+
+	Position getXYfromRight() const {
+		Position pos;
+		pos.x = _mostLeftRightButton ? _mostLeftRightButton ->x() - _spacing_x - _buttonsize
+							         : x() + w() - _spacing_x - _buttonsize;
+		pos.y = 1;
+		return pos;
 	}
 private:
+	Fl_Button* _mostRightLeftButton = NULL;
+	Fl_Button* _mostLeftRightButton = NULL;
+	int _spacing_x = 4;
+	int _buttonsize = 32;
 };
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //*+++++++++++++++++++++++  CONTROLLER  +++++++++++++++++++++++
 class Controller {
 private:
 	struct PhotoInfo {
+		std::string folder;
+		std::string filename;
 		PhotoBox* box = NULL;
 	};
+
+	enum Page {
+		NEXT,
+		PREVIOUS,
+		LAST,
+		FIRST
+	};
+
 public:
-	Controller( Scroll* scroll ) : _scroll(scroll) {
+	Controller( Scroll* scroll, ToolBar* toolbar ) : _scroll(scroll), _toolbar(toolbar) {
 		_scroll->setResizeCallback( onCanvasResize_static, this );
 		_scroll->setScrollCallback( onScrolled_static, this );
+		_toolbar->setAllPageButtonsEnabled( false );
+	}
+
+	~Controller() {
+		deletePhotoInfos();
 	}
 
 	static void onCanvasResize_static( int x, int y, int w, int h, void* data ) {
-		Controller* pThis = (Controller*)data;
-		pThis->layoutPhotos( x, y, w, h );
+		//Controller* pThis = (Controller*)data;
+		//pThis->layoutPhotos( x, y, w, h );
 	}
 
 	static void onScrolled_static( int xpos, int ypos, void* data ) {
-		Controller* pThis = (Controller*)data;
-		pThis->checkLoadPhotosAfterScrolling( xpos, ypos );
+//		Controller* pThis = (Controller*)data;
+//		pThis->checkLoadPhotosAfterScrolling( xpos, ypos );
 	}
 
 	static void onOpen_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
-		pThis->onOpen();
+		pThis->openFolder();
 	}
 
-	void onOpen() {
+	static void onChangePage( Fl_Widget* btn, void* data ) {
+		Controller* pThis = (Controller*)data;
+		string label;
+		label.append( btn->label() );
+		if( label == SYMBOL_NEXT ) {
+			pThis->browseNextPage();
+		} else if( label == SYMBOL_LAST ) {
+			pThis->browseLastPage();
+		} else if( label == SYMBOL_PREVIOUS ) {
+			pThis->browsePreviousPage();
+		} else {
+			pThis->browseFirstPage();
+		}
+	}
+
+	void openFolder() {
 		Fl_Native_File_Chooser native;
 		native.title( "Choose folder with photos to show" );
 		//native.directory(G_filename->value());
@@ -352,7 +484,7 @@ public:
 				title.append( native.filename() );
 				((Fl_Double_Window*)_scroll->parent())->label( title.c_str() );
 				/*get photos from selected dictionary*/
-				getPhotos( native.filename() );
+				readPhotos( native.filename() );
 			} else {
 				/* do nothing */
 			}
@@ -360,21 +492,24 @@ public:
 		}
 	}
 
-	void getPhotos( const char* folder ) {
+	void readPhotos( const char* folder ) {
 		DIR *dir;
 		struct dirent *ent;
 		if ( (dir = opendir( folder )) != NULL ) {
 			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
+			deletePhotoInfos();
 			/* print all the files and directories within directory */
 			while ( (ent = readdir( dir )) != NULL ) {
 				//fprintf( stderr, "%s\n", ent->d_name );
 				if( ent->d_type == DT_REG && ent->d_name[0] != '.' ) {
-					addPhoto( folder, ent->d_name );
+					if( isImageFile( ent->d_name ) ) {
+						addImageFile( folder, ent->d_name );
+					}
 				}
 			}
 			closedir( dir );
 			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
-			layoutPhotos( _scroll->x(), _scroll->y(), _scroll->w(), _scroll->h() );
+			layoutPhotos( Page::FIRST );
 		} else {
 			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 			/* could not open directory */
@@ -384,79 +519,113 @@ public:
 		}
 	}
 
-	void addPhoto( const char* folder, const char* filename ) {
-		PhotoBox* box = new PhotoBox( 1, 1, _box_w, _box_h, folder, filename );
-
-		if( _usedBytes < MAX_MEM_USAGE ) {
-			loadPhoto( box );
+	bool isImageFile( const char* filename ) {
+		my::StringHelper& strh = my::StringHelper::instance();
+		if( strh.endsWith( filename, "jpg" ) ||
+			strh.endsWith( filename, "png" ) ||
+			strh.endsWith( filename, "jpeg" ) ||
+			strh.endsWith( filename, "JPG" ) ||
+			strh.endsWith( filename, "JPEG " ) ||
+			strh.endsWith( filename, "PNG" ) )
+		{
+			return true;
 		}
-		_photos.push_back( box );
+
+		return false;
 	}
 
-	void layoutPhotos( int x, int y, int w, int h ) {
-		for( int i = 0, imax = _scroll->children(); i < imax; i++ ) {
-			PhotoBox* box = dynamic_cast<PhotoBox*>( _scroll->child(0) );
-			if( box ) {
-				_scroll->remove(0);
-			}
-		}
-		int X = x + _spacing_x;
-		int Y = y + _spacing_y;
-		for( auto ph : _photos ) {
-			if( X > ( x + w ) ) {
-				X = x + _spacing_x;
+	void addImageFile( const char* folder, const char* filename ) {
+		//todo: delete PhotoInfos in controller's destructor
+		PhotoInfo* pinfo = new PhotoInfo;
+		pinfo->folder.append( folder );
+		pinfo->filename.append( filename );
+		_photos.push_back( pinfo );
+	}
+
+	void layoutPhotos( Page page ) {
+		//remove and destroy all previous PhotoBoxes
+		removePhotosFromCanvas();
+		_usedBytes = 0;
+
+		int X = _scroll->x() + _spacing_x;
+		int Y = _scroll->y() + _spacing_y;
+		int n = 0;  //number of photos per row
+		int rows = 0;
+		//calculate photo index to start and to end with
+		setStartAndEndIndexes( page );
+
+		auto itr = _photos.begin() + _photoIndexStart;
+		int idx = _photoIndexStart;
+		for(  ; itr != _photos.end() && idx <= _photoIndexEnd; itr++, idx++ ) {
+			if( n > 2 ) { //start next row
+				if( ++rows > 3 ) break;
+				X = _scroll->x() + _spacing_x;
 				Y += ( _box_h + _spacing_y );
+				n = 0;
 			}
-			_scroll->add( ph );
-			ph->position( X, Y );
+			PhotoInfo* pinfo = *itr;
+			if( pinfo->box == NULL ) {
+				if( _usedBytes > MAX_MEM_USAGE ) break;
+
+				pinfo->box = new PhotoBox( X, Y, _box_w, _box_h,
+						                  pinfo->folder.c_str(),
+										  pinfo->filename.c_str() );
+				loadPhoto( pinfo->box );
+			}
+			_scroll->add( pinfo->box );
 			X += ( _box_w + _spacing_x );
-		}
+			n++;
+		} //for
+		adjustPageButtons();
 		_scroll->redraw();
 	}
 
-	/**
-	 * By scrolling a row of PhotoBoxes might come in view whose images are not loaded.
-	 * We have to unload the PhotoBoxes in an upper row and then load the boxes of the
-	 * row coming in sight.
-	 * @params xpos, ypos: scroll amount. E.g. ypos = 16 means that Fl_Scroll is extending
-	 * the northern border for 16 pixels.
-	 */
-	void checkLoadPhotosAfterScrolling( int xpos, int ypos ) {
-		//check the bottommost y value we can see:
-		int ymax = _scroll->y() + _scroll->h() + ypos;
-		//get the PhotoBoxes containing ymax and load them if necessary:
-		int row_y = 0;
-		vector<PhotoBox*> to_load;
-		for( auto ph : _photos ) {
-			if( ph->y() < ymax && ( ph->y() + ph->h() ) >= ymax ) {
-				if( row_y == 0 ) row_y = ph->y();
-				if( row_y != ph->y() ) break;
-				if( !ph->image() ) {
-					to_load.push_back( ph );
-				}
+	/** Remove and destroy all photos from canvas (scroll area). */
+	void removePhotosFromCanvas() {
+		_scroll->clear();
+		for( auto pinfo : _photos ) {
+			pinfo->box = NULL;
+		}
+	}
+
+	void setStartAndEndIndexes( Page page ) {
+		switch( page ) {
+		case Page::FIRST:
+			_photoIndexStart = 0;
+			_photoIndexEnd = _photosPerRow * _maxRows - 1;
+			validateEndIndex();
+			break;
+		case Page::NEXT:
+			_photoIndexStart = _photoIndexEnd + 1;
+			if( _photoIndexStart >= (int)_photos.size() ) {
+				//start from the beginning
+				_photoIndexStart = 0;
 			}
+			_photoIndexEnd = _photoIndexStart + _photosPerRow * _maxRows - 1;
+			validateEndIndex();
+			break;
+		case Page::PREVIOUS:
+			_photoIndexEnd = _photoIndexStart - 1;
+			_photoIndexStart = _photoIndexEnd - ( _photosPerRow * _maxRows - 1 );
+			validateStartIndex();
+			break;
+		case Page::LAST:
+			_photoIndexEnd = (int)_photos.size();
+			_photoIndexStart = _photoIndexEnd - ( _photosPerRow * _maxRows - 1 );
+			validateStartIndex();
+			break;
 		}
 
-		if( to_load.size() > 0 ) {
-			//we have photos to reload, so unload the topmost
-			//row of PhotoBoxes with loaded photos
-			row_y = 0;
-			for( auto ph : _photos ) {
-				Fl_Image* img;
-				if( ( img = ph->image() ) != NULL ) {
-					_usedBytes -= getPhotoSize( img );
-					delete img;
-					ph->image( NULL );
-				}
-			}
-		}
+	}
 
-		//...and load photos contained in vector to_load:
-		for( auto ph : to_load ) {
-			loadPhoto( ph );
+	inline void validateEndIndex() {
+		if( _photoIndexEnd >= (int)_photos.size() ) {
+			_photoIndexEnd = _photos.size() - 1;
 		}
+	}
 
-		_scroll->redraw();
+	inline void validateStartIndex() {
+		_photoIndexStart = _photoIndexStart < 0 ? 0 : _photoIndexStart;
 	}
 
 private:
@@ -473,14 +642,55 @@ private:
 		return ( img->data_w() * img->data_h() * img->d() ) ;
 	}
 
+	void browseNextPage() {
+		layoutPhotos( Page::NEXT );
+	}
+
+	void browseLastPage() {
+		layoutPhotos( Page::LAST );
+	}
+
+	void browsePreviousPage() {
+		layoutPhotos( Page::PREVIOUS );
+	}
+
+	void browseFirstPage() {
+		layoutPhotos( Page::FIRST );
+	}
+
+	void deletePhotoInfos() {
+		for( auto pinfo : _photos ) {
+			delete pinfo;
+		}
+		_photos.clear();
+	}
+
+	void adjustPageButtons() {
+		_toolbar->setAllPageButtonsEnabled( false );
+		if( _photoIndexStart > 0 ) {
+			_toolbar->setPageButtonEnabled( SYMBOL_FIRST, true );
+			_toolbar->setPageButtonEnabled( SYMBOL_PREVIOUS, true );
+		}
+		if( _photoIndexEnd < _photos.size() - 1 ) {
+			_toolbar->setPageButtonEnabled( SYMBOL_NEXT, true );
+			_toolbar->setPageButtonEnabled( SYMBOL_LAST, true );
+		}
+	}
+
 private:
 	Scroll* _scroll;
+	ToolBar* _toolbar;
 	int _box_w = 400;
 	int _box_h = 400;
 	int _spacing_x = 10;
 	int _spacing_y = 5;
-	//PhotoBox* _lastBox = NULL;
-	std::vector<PhotoBox*> _photos;
+
+	int _photosPerRow = 3;
+	int _maxRows = 4;
+
+	std::vector<PhotoInfo*> _photos;
+	int _photoIndexStart = -1;
+	int _photoIndexEnd = -1;
 	long _usedBytes = 0;
 };
 //*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -500,13 +710,12 @@ int main() {
 	ToolBar* tb = new ToolBar( 0, 0, 500 );
 	Scroll* scroll = new Scroll( 0, tb->h(), 500, win->h() - tb->h() );
 
-	Controller ctrl( scroll );
+	Controller ctrl( scroll, tb );
 	tb->addButton( open_xpm, "Open photo folder...", Controller::onOpen_static, &ctrl );
-
-	//ctrl.addPicture( "/home/martin/Bilder/2020/03/IMG_3956.JPG" );
-//	Fl_JPEG_Image jpg("/home/martin/Bilder/2020/03/IMG_3956.JPG");
-//	int w = 200, h = 200;
-//	jpg.scale( w, h, 1, 1 );
+	tb->addButton( SYMBOL_LAST, FL_ALIGN_RIGHT, "Browse last page", Controller::onChangePage, &ctrl );
+	tb->addButton( SYMBOL_NEXT, FL_ALIGN_RIGHT, "Browse next page", Controller::onChangePage, &ctrl );
+	tb->addButton( SYMBOL_PREVIOUS, FL_ALIGN_RIGHT, "Browse previous page", Controller::onChangePage, &ctrl );
+	tb->addButton( SYMBOL_FIRST, FL_ALIGN_RIGHT, "Browse first page", Controller::onChangePage, &ctrl );
 
 	win->resizable( scroll );
 	win->end();
