@@ -15,8 +15,11 @@
 #include <fltk_ext/TextMeasure.h>
 
 #include "../images/open.xpm"
+#include "../images/manage_folders.xpm"
 
 #include "std.h"
+
+#include "FolderManager.hpp"
 
 #include <my/StringHelper.h>
 
@@ -92,7 +95,7 @@ const long MAX_MEM_USAGE = 800000000;
 class PhotoBox : public Fl_Box {
 public:
 	PhotoBox( int x, int y, int w, int h,
-			const char* folder = NULL, const char* file = NULL ) :
+			const char* folder = NULL, const char* file = NULL, const char* datetime = NULL ) :
 		Fl_Box( x, y, w, h )
 	{
 		if( folder ) _folder.append( folder );
@@ -100,6 +103,10 @@ public:
 			_file.append( file );
 			_filename_size =
 					TextMeasure::inst().get_size( file, _font, _fontsize );
+		}
+		if( datetime ) {
+			_datetime.append( datetime );
+			_datetime_size = TextMeasure::inst().get_size( datetime, _font, _fontsize );
 		}
 
 		box( FL_FLAT_BOX );
@@ -151,10 +158,18 @@ protected:
 	void draw() {
 		fl_push_clip( x(), y(), w(), h() );
 		Fl_Box::draw();
+
 		//draw filename below picture
 		fl_color( FL_BLACK );
 		int xc = x() + w()/2 - _filename_size.w/2;
-		fl_draw( _file.c_str(), xc, y() + h() - 12 );
+		int Y = y() + h() - 20;
+		fl_draw( _file.c_str(), xc, Y );
+
+		//draw datetime below filename
+		xc = x() + w()/2 - _datetime_size.w/2;
+		Y += 16;
+		fl_draw( _datetime.c_str(), xc, Y );
+
 		//draw selection border if box is selected
 		if( _isSelected ) {
 			int margin = 2;
@@ -179,9 +194,11 @@ protected:
 private:
 	string _folder;
 	string _file;
+	string _datetime;
 	Fl_Font _font = FL_HELVETICA;
 	Fl_Fontsize _fontsize = 12;
 	Size _filename_size;
+	Size _datetime_size;
 	bool _isSelected = false;
 };
 
@@ -364,6 +381,22 @@ public:
 		} //for
 	}
 
+	/** inserts a resizable dummy boy which prevents buttons from
+	 * resizing when the application window is resized.
+	 * Call this method after having added all toolbar buttons.
+	 */
+	void fixButtonsOnResize() {
+		if( _filler == NULL )  {
+			int X = x() + w()/2;
+			_filler = new Fl_Box( X, y(), 1, 1 );
+			_filler->box( FL_FLAT_BOX );
+			//_filler->color( FL_RED );
+			add( _filler );
+			resizable( _filler );
+		} else {
+
+		}
+	}
 private:
 	Fl_Button* createButton( int x, int y, const char *tooltip = 0,
 			Fl_Callback *cb = 0, void *data = 0 )
@@ -402,6 +435,7 @@ private:
 private:
 	Fl_Button* _mostRightLeftButton = NULL;
 	Fl_Button* _mostLeftRightButton = NULL;
+	Fl_Box* _filler = NULL;
 	int _spacing_x = 4;
 	int _buttonsize = 32;
 };
@@ -412,6 +446,7 @@ private:
 	struct PhotoInfo {
 		std::string folder;
 		std::string filename;
+		std::string datetime;
 		PhotoBox* box = NULL;
 	};
 
@@ -448,7 +483,12 @@ public:
 		pThis->openFolder();
 	}
 
-	static void onChangePage( Fl_Widget* btn, void* data ) {
+	static void onManageFolders_static( Fl_Widget*, void* data ) {
+		Controller* pThis = (Controller*) data;
+
+	}
+
+	static void onChangePage_static( Fl_Widget* btn, void* data ) {
 		Controller* pThis = (Controller*)data;
 		string label;
 		label.append( btn->label() );
@@ -464,81 +504,33 @@ public:
 	}
 
 	void openFolder() {
-		Fl_Native_File_Chooser native;
-		native.title( "Choose folder with photos to show" );
-		//native.directory(G_filename->value());
-		native.type( Fl_Native_File_Chooser::BROWSE_DIRECTORY );
-		// Show native chooser
-		switch ( native.show() ) {
-		case -1: /*ERROR -- todo*/
-			;
-			break; // ERROR
-		case 1: /*CANCEL*/
-			;
-			fl_beep();
-			break; // CANCEL
-		default: // PICKED DIR
-			if ( native.filename() ) {
-				string title = "Photo Organization";
-				title.append( ": " );
-				title.append( native.filename() );
-				((Fl_Double_Window*)_scroll->parent())->label( title.c_str() );
-				/*get photos from selected dictionary*/
-				readPhotos( native.filename() );
-			} else {
-				/* do nothing */
-			}
-			break;
+		const char* folder = _folderManager.chooseFolder();
+		if( folder ) {
+			string title = "Photo Organization";
+			title.append( ": " );
+			title.append( folder );
+			((Fl_Double_Window*)_scroll->parent())->label( title.c_str() );
+			/*get photos from selected dictionary*/
+			readPhotos( folder );
 		}
 	}
 
 	void readPhotos( const char* folder ) {
-		DIR *dir;
-		struct dirent *ent;
-		if ( (dir = opendir( folder )) != NULL ) {
-			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
-			deletePhotoInfos();
-			/* print all the files and directories within directory */
-			while ( (ent = readdir( dir )) != NULL ) {
-				//fprintf( stderr, "%s\n", ent->d_name );
-				if( ent->d_type == DT_REG && ent->d_name[0] != '.' ) {
-					if( isImageFile( ent->d_name ) ) {
-						addImageFile( folder, ent->d_name );
-					}
-				}
-			}
-			closedir( dir );
-			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
-			layoutPhotos( Page::FIRST );
-		} else {
-			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
-			/* could not open directory */
-			string msg = "Couldn't open folder ";
-			msg.append( folder );
-			throw runtime_error( msg );
-		}
-	}
-
-	bool isImageFile( const char* filename ) {
-		my::StringHelper& strh = my::StringHelper::instance();
-		if( strh.endsWith( filename, "jpg" ) ||
-			strh.endsWith( filename, "png" ) ||
-			strh.endsWith( filename, "jpeg" ) ||
-			strh.endsWith( filename, "JPG" ) ||
-			strh.endsWith( filename, "JPEG " ) ||
-			strh.endsWith( filename, "PNG" ) )
-		{
-			return true;
+		vector<ImageInfo*>& imagefiles = _folderManager.getImages( folder );
+		for( auto img : imagefiles ) {
+			addImageFile( img->folder.c_str(), img->filename.c_str(), img->datetime.c_str() );
 		}
 
-		return false;
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
+		layoutPhotos( Page::FIRST );
 	}
 
-	void addImageFile( const char* folder, const char* filename ) {
+	void addImageFile( const char* folder, const char* filename, const char* datetime ) {
 		//todo: delete PhotoInfos in controller's destructor
 		PhotoInfo* pinfo = new PhotoInfo;
 		pinfo->folder.append( folder );
 		pinfo->filename.append( filename );
+		pinfo->datetime.append( datetime );
 		_photos.push_back( pinfo );
 	}
 
@@ -569,7 +561,8 @@ public:
 
 				pinfo->box = new PhotoBox( X, Y, _box_w, _box_h,
 						                  pinfo->folder.c_str(),
-										  pinfo->filename.c_str() );
+										  pinfo->filename.c_str(),
+										  pinfo->datetime.c_str() );
 				loadPhoto( pinfo->box );
 			}
 			_scroll->add( pinfo->box );
@@ -671,7 +664,7 @@ private:
 			_toolbar->setPageButtonEnabled( SYMBOL_FIRST, true );
 			_toolbar->setPageButtonEnabled( SYMBOL_PREVIOUS, true );
 		}
-		if( _photoIndexEnd < _photos.size() - 1 ) {
+		if( _photoIndexEnd < (int)_photos.size() - 1 ) {
 			_toolbar->setPageButtonEnabled( SYMBOL_NEXT, true );
 			_toolbar->setPageButtonEnabled( SYMBOL_LAST, true );
 		}
@@ -692,16 +685,92 @@ private:
 	int _photoIndexStart = -1;
 	int _photoIndexEnd = -1;
 	long _usedBytes = 0;
+	FolderManager _folderManager;
 };
 //*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+//void getDateTimeInfo( const string& result, string& datetime, size_t start ) {
+//	const string datetime_const = "Date/Time";
+//	size_t pos1 = result.find( datetime_const );
+//	size_t posX = result.find( ":", pos1 ) + 1;
+//	size_t posEOL = result.find( "\n", posX );
+//	int len = posEOL - posX;
+//	datetime = result.substr( posX, len );
+//}
+//
+//void splitPathnfile( const string& pathnfile, string& path, string& file ) {
+//	size_t pos = pathnfile.rfind( "/" );
+//	path = pathnfile.substr( 0, pos );
+//	int len = pathnfile.size() - pos - 1;
+//	file = pathnfile.substr( pos+1, len );
+//}
+//
+//void provideImageInfos( string& result ) {
+//	//my::StringHelper& sh = my::StringHelper::instance();
+//	size_t sz = result.size();
+//	const string filename = "File name";
+//
+//
+//	size_t pos1 = result.find( filename, 0 );
+//	while( pos1 != string::npos ) {
+//		size_t posSlash = result.find( "/", pos1 + 1 );
+//		size_t posEOL;
+//		if( posSlash != string::npos ) {
+//			posEOL = result.find( "\n", posSlash + 1 );
+//			if( posEOL != string::npos ) {
+//				ImageInfo* ii = new ImageInfo;
+//				int len = posEOL - posSlash;
+//				string pathnfile( result, posSlash, len );
+//				splitPathnfile( pathnfile, ii->folder, ii->filename );
+//				getDateTimeInfo( result, ii->datetime, posEOL + 1 );
+//				//fprintf( stderr, "found: %s\n", pathnfile.c_str() );
+//			} else {
+//				throw runtime_error( "FolderManager::provideImageInfos(): "
+//									 "Can't find end of line" );
+//			}
+//		} else {
+//			throw runtime_error( "FolderManager::provideImageInfos(): "
+//								 "Can't find start of path" );
+//		}
+//		pos1 = result.find( filename, posEOL + 1 );
+//	} // while
+//}
+//
+//#include <unistd.h>
+//#include <stdio.h>
+//void test_jhead() {
+////	string command = "jhead /home/martin/Projects/cpp/Phorg/testphotos/*.*";
+////	int rc = system( command.c_str() );
+//
+//	FILE* pipe;
+//	pipe = popen( "jhead /home/martin/Projects/cpp/Phorg/testphotos/*.*", "r" );
+//	if (!pipe) throw std::runtime_error( "popen() failed!" );
+//	char buffer[128];
+//	string result = "";
+//	try {
+//		while (fgets( buffer, sizeof buffer, pipe ) != NULL) {
+//			result += buffer;
+//		}
+//	} catch (...) {
+//		pclose( pipe );
+//		throw;
+//	}
+//	pclose( pipe );
+//
+//	fprintf( stderr, "here we go: %s\n", result.c_str() );
+//	provideImageInfos( result );
+//
+////	int rc = system( "jhead" );
+////	fprintf( stderr, "rc: %d\n", rc );
+//}
 
 /**
  * Application to get organization into your photos' folders.
  * View photo, delete it or move or copy it into another folder quickly.
  * Sort them in a conveniant way based on their names or date of taking.
  */
-
 int main() {
+//	test_jhead();
 	// additional linker options: -lfltk_images -ljpeg -lpng
 	fl_register_images();
 	Fl_Double_Window *win =
@@ -711,12 +780,13 @@ int main() {
 	Scroll* scroll = new Scroll( 0, tb->h(), 500, win->h() - tb->h() );
 
 	Controller ctrl( scroll, tb );
-	tb->addButton( open_xpm, "Open photo folder...", Controller::onOpen_static, &ctrl );
-	tb->addButton( SYMBOL_LAST, FL_ALIGN_RIGHT, "Browse last page", Controller::onChangePage, &ctrl );
-	tb->addButton( SYMBOL_NEXT, FL_ALIGN_RIGHT, "Browse next page", Controller::onChangePage, &ctrl );
-	tb->addButton( SYMBOL_PREVIOUS, FL_ALIGN_RIGHT, "Browse previous page", Controller::onChangePage, &ctrl );
-	tb->addButton( SYMBOL_FIRST, FL_ALIGN_RIGHT, "Browse first page", Controller::onChangePage, &ctrl );
-
+	tb->addButton( open_xpm, "Choose photo folder", Controller::onOpen_static, &ctrl );
+	tb->addButton( manage_folders_xpm, "List, create and delete subfolders", Controller::onManageFolders_static, &ctrl );
+	tb->addButton( SYMBOL_LAST, FL_ALIGN_RIGHT, "Browse last page", Controller::onChangePage_static, &ctrl );
+	tb->addButton( SYMBOL_NEXT, FL_ALIGN_RIGHT, "Browse next page", Controller::onChangePage_static, &ctrl );
+	tb->addButton( SYMBOL_PREVIOUS, FL_ALIGN_RIGHT, "Browse previous page", Controller::onChangePage_static, &ctrl );
+	tb->addButton( SYMBOL_FIRST, FL_ALIGN_RIGHT, "Browse first page", Controller::onChangePage_static, &ctrl );
+	tb->fixButtonsOnResize();
 	win->resizable( scroll );
 	win->end();
 	win->show();
