@@ -100,7 +100,9 @@ public:
 	 */
 	void renameFilesToDatetime( const char* folder ) {
 		for( auto ii : _images ) {
-			renameFile( ii->folder, ii->filename, ii->datetime );
+			if( ii->datetime != "unknown" ) {
+				renameFile( ii->folder, ii->filename, ii->datetime );
+			}
 		}
 	}
 
@@ -197,8 +199,9 @@ private:
 									 "Can't find colon" );
 			}
 		} else {
-			throw runtime_error( "FolderManager::getDateTimeInfo(): "
-								 "Can't find Date/Time string" );
+//			throw runtime_error( "FolderManager::getDateTimeInfo(): "
+//								 "Can't find Date/Time string" );
+			datetime = "unknown";
 		}
 	}
 
