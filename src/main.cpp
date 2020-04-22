@@ -531,6 +531,7 @@ public:
 	Controller( Scroll* scroll, ToolBar* toolbar ) : _scroll(scroll), _toolbar(toolbar) {
 		_scroll->setResizeCallback( onCanvasResize_static, this );
 		_scroll->setScrollCallback( onScrolled_static, this );
+		_scroll->scrollbar.linesize( 80 );
 	}
 
 	~Controller() {
@@ -595,16 +596,16 @@ public:
 
 	void renameFiles() {
 		int resp = fl_choice( "Rename all photos?\n"
-				              "Resulting filenames will be of format\nYYYYMMDD_TTTTTT",
+				              "Resulting filenames will be of format\nYYYYMMDD_TTTTTT.jpg",
 							  "No", "Yes", NULL );
 		if( resp == 1 ) {
 			_folderManager.renameFilesToDatetime( _folder.c_str() );
-			//todo: rename names in std::vector<PhotoInfo*> _photos;
-			//      and make them redraw
+			readPhotos( _folder.c_str() );
 		}
 	}
 
 	void readPhotos( const char* folder ) {
+		reset();
 		vector<ImageInfo*>& imagefiles = _folderManager.getImages( folder );
 		for( auto img : imagefiles ) {
 			addImageFile( img->folder.c_str(), img->filename.c_str(), img->datetime.c_str() );
@@ -612,6 +613,14 @@ public:
 
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 		layoutPhotos( Page::FIRST );
+	}
+
+	void reset() {
+		removePhotosFromCanvas();
+		_photos.clear();
+		_usedBytes = 0;
+		_photoIndexStart = -1;
+		_photoIndexEnd = -1;
 	}
 
 	void addImageFile( const char* folder, const char* filename, const char* datetime ) {
@@ -777,7 +786,7 @@ private:
 	int _photosPerRow = 3;
 	int _maxRows = 4;
 
-	std::vector<PhotoInfo*> _photos;
+	std::vector<PhotoInfo*> _photos; //contains all photos of current folder.
 	int _photoIndexStart = -1;
 	int _photoIndexEnd = -1;
 	long _usedBytes = 0;
