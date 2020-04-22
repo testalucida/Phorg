@@ -65,6 +65,7 @@ public:
 	/**
 	 * Gets all jpg, jpeg JPG and JPEG files in the given folder.
 	 * No png files.
+	 * Renames files in a kind that the time taken forms the file name.
 	 * Rotate jpeg if wanted and necessary and sort them if wanted
 	 * ascending or descending according to  Date/Time info in the EXIF block.
 	 * This is done by using jhead.
@@ -91,6 +92,37 @@ public:
 		return _images;
 	}
 
+	/**
+	 * Renames all photo files in the given folder so that their filename
+	 * consists of the datetime token the photo.
+	 * FolderManager::getImages() must have been called before
+	 * otherwise no files will be renamed.
+	 */
+	void renameFilesToDatetime( const char* folder ) {
+		for( auto ii : _images ) {
+			renameFile( ii->folder, ii->filename, ii->datetime );
+		}
+	}
+
+	/**
+	 * Moves file filename from srcfolder to destfolder
+	 */
+	void moveFile( const char* destfolder, const char* srcfolder,
+			       const char* filename )
+	{
+		string current = srcfolder;
+		current.append( "/" );
+		current.append( filename );
+		string dest = destfolder;
+		dest.append( "/" );
+		dest.append( filename );
+		if( rename( current.c_str(), dest.c_str() ) != 0 ) {
+			perror( "Error moving file" );
+			string msg = "Error on moving file from " + current + " to " + dest;
+			throw runtime_error( "FolderManager::moveFile(): " + msg );
+		}
+	}
+
 private:
 	bool isImageFile( const char *filename ) {
 		my::StringHelper &strh = my::StringHelper::instance();
@@ -115,8 +147,7 @@ private:
 	}
 
 	void rotateImages( const char* folder ) {
-		string command = "jhead ";
-		command.append( "-autorot " );
+		string command = "jhead -autorot ";
 		command.append( folder );
 		command.append( "/*.*" );
 		int rc = system( command.c_str() );
@@ -131,7 +162,7 @@ private:
 		command.append( "/*.*" );
 		FILE* pipe;
 		pipe = popen( command.c_str(), "r" );
-		if (!pipe) throw std::runtime_error( "FolderManager::collectImageInfos(): popen() failed!" );
+		if( !pipe ) throw std::runtime_error( "FolderManager::collectImageInfos(): popen() failed!" );
 		char buffer[128];
 		string result = "";
 		try {
@@ -151,7 +182,7 @@ private:
 		const string datetime_const = "Date/Time";
 		size_t pos1 = result.find( datetime_const, start );
 		if( pos1 != string::npos ) {
-			size_t posX = result.find( ":", pos1 ) + 1;
+			size_t posX = result.find( ":", pos1 ) + 2;
 			if( posX != string::npos ) {
 				size_t posEOL = result.find( "\n", posX );
 				if( posEOL != string::npos ) {
@@ -204,6 +235,36 @@ private:
 			}
 			pos1 = result.find( filename, posEOL + 1 );
 		} // while
+	}
+
+	void renameFile( const string& folder, string& filename, const string& datetime ) {
+		string old = folder;
+		old.append( "/" );
+		old.append( filename );
+		filename.clear();
+		getFilenameFromDatetime( filename, datetime );
+		string ne = folder;
+		ne.append( "/" );
+		ne.append( filename );
+		if( rename( old.c_str(), ne.c_str() ) != 0 ) {
+			perror( "Error renaming file" );
+			string msg = "Error on renaming file from " + old + " to " + ne;
+			throw runtime_error( "FolderManager::renameFile(): " + msg );
+		}
+	}
+
+	void getFilenameFromDatetime( string& newname, const string& dt ) {
+		for( const char* p = dt.c_str(); *p; p++ ) {
+			if( *p == ':' ) {
+				continue;
+			}
+			if( *p == ' ' ) {
+				newname.append( 1, '_' );
+			} else {
+				newname.append( 1, *p );
+			}
+		}
+		newname.append( ".jpg" );
 	}
 
 	void sortImages( Sort sortDirection ) {

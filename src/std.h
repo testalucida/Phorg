@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
-
+#include <cstdio>
 
 
 #endif /* STD_H_ */

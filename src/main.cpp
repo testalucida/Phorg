@@ -10,6 +10,8 @@
 #include <FL/Fl_Pack.H>
 #include <FL/Fl_Button.H>
 #include <FL/Fl_Native_File_Chooser.H>
+#include <FL/Fl_SVG_Image.H>
+#include <FL/fl_ask.H>
 #include <fltk_ext/Canvas.h>
 #include <fltk_ext/DragBox.h>
 #include <fltk_ext/TextMeasure.h>
@@ -20,6 +22,7 @@
 #include "std.h"
 
 #include "FolderManager.hpp"
+#include "FolderDialog.hpp"
 
 #include <my/StringHelper.h>
 
@@ -159,16 +162,31 @@ protected:
 		fl_push_clip( x(), y(), w(), h() );
 		Fl_Box::draw();
 
+		//draw the buttons above picture
+		//first draw a rectangle to write in hence when a
+		//picture is displayed portrait the buttons cannot be seen.
+		int xc = x() + w()/2;
+		//we have 3 buttons (garbage/dunno/good) each of which is 30 px
+		//with a spacing of 4 px between.
+
+		//draw the text below picture: name of photo and time taken.
+		int xcf = xc - _filename_size.w/2;
+		int xcd = xc - _datetime_size.w/2;
+		int Y = y() + h() - 20;
+		//first draw a rectangle to write in hence when a
+		//picture is drawn portrait the text is hardly to see.
+		int X = xcf < xcd ? xcf : xcd;
+		int W = _filename_size.w > _datetime_size.w ? _filename_size.w
+				                                    : _datetime_size.w;
+		fl_rectf( X, Y-15, W+20 /*dunno why*/, 35, FL_LIGHT2 );
+
 		//draw filename below picture
 		fl_color( FL_BLACK );
-		int xc = x() + w()/2 - _filename_size.w/2;
-		int Y = y() + h() - 20;
-		fl_draw( _file.c_str(), xc, Y );
+		fl_draw( _file.c_str(), xcf, Y );
 
 		//draw datetime below filename
-		xc = x() + w()/2 - _datetime_size.w/2;
 		Y += 16;
-		fl_draw( _datetime.c_str(), xc, Y );
+		fl_draw( _datetime.c_str(), xcd, Y );
 
 		//draw selection border if box is selected
 		if( _isSelected ) {
@@ -300,6 +318,22 @@ static const char* SYMBOL_NEXT = "@>";
 static const char* SYMBOL_PREVIOUS = "@<";
 static const char* SYMBOL_FIRST = "@|<";
 
+enum ToolId {
+	OPEN_FOLDER,
+	MANAGE_FOLDERS,
+	RENAME_FILES,
+	LAST_PAGE,
+	NEXT_PAGE,
+	PREVIOUS_PAGE,
+	FIRST_PAGE,
+	NONE
+};
+
+struct Tool {
+	ToolId toolId = ToolId::NONE;
+	Fl_Button* btn = NULL;
+};
+
 class ToolBar : public Fl_Group {
 public:
 	ToolBar( int x, int y, int w ) : Fl_Group( x, y, w, 34 ) {
@@ -313,21 +347,22 @@ public:
 	/**
 	 * Adds a button to the right side of the most right button on the left side of the toolbar.
 	 */
-	void addButton( const char** xpm, const char *tooltip = 0,
+	void addButton( ToolId id, const char** xpm, const char *tooltip = 0,
 			        Fl_Callback *cb=0, void *data=0 )
 	{
 		Position xy = getXYfromLeft();
-		Fl_Button* b = createButton( xy.x, xy.y, tooltip, cb, data );
+		Fl_Button* b = createButton( id, xy.x, xy.y, tooltip, cb, data );
 
 		Fl_Pixmap* img = new Fl_Pixmap( xpm );
 		b->image( img );
 		_mostRightLeftButton = b;
 	}
 
-	void addButton( const char* symbol, Fl_Align align, const char *tooltip = 0,
+	void addButton( ToolId id, const char* symbol, Fl_Align align, const char *tooltip = 0,
 				    Fl_Callback *cb=0, void *data=0 )
 	{
 		Position xy;
+
 		if( align == FL_ALIGN_LEFT ) {
 			xy = getXYfromLeft();
 		} else if( align == FL_ALIGN_RIGHT ) {
@@ -335,14 +370,26 @@ public:
 		} else {
 			throw runtime_error( "ToolBar::addButton: FL_ALIGN_CENTER not yet implemented" );
 		}
-		Fl_Button* btn = createButton( xy.x, xy.y, tooltip, cb, data );
-		btn->copy_label( symbol );
+
+		Fl_Button* btn = createButton( id, xy.x, xy.y, tooltip, cb, data );
+		if( symbol ) btn->copy_label( symbol );
 
 		if( align == FL_ALIGN_LEFT ) {
 			_mostRightLeftButton = btn;
 		} else { //FL_ALIGN_RIGHT
 			_mostLeftRightButton = btn;
 		}
+	}
+
+	void addButton( ToolId id, const char* svg_file, const char *tooltip = 0,
+				    Fl_Callback *cb=0, void *data=0 )
+	{
+		addButton( id, NULL, FL_ALIGN_LEFT, tooltip, cb, data );
+		const Tool& tool = getTool( id );
+		Fl_Button* btn = tool.btn;
+		Fl_SVG_Image *svg = new Fl_SVG_Image( svg_file );
+		svg->scale( btn->w() - 2, btn->h() - 2 );
+		btn->image( svg );
 	}
 
 	void setPageButtonEnabled( const char* buttonsymbol, bool enable ) {
@@ -381,6 +428,16 @@ public:
 		} //for
 	}
 
+	void setManageFoldersButtonEnabled( bool enable ) {
+		const Tool& t = getTool( ToolId::MANAGE_FOLDERS );
+		if( enable ) {
+			t.btn->activate();
+		} else {
+			t.btn->deactivate();
+		}
+
+	}
+
 	/** inserts a resizable dummy boy which prevents buttons from
 	 * resizing when the application window is resized.
 	 * Call this method after having added all toolbar buttons.
@@ -397,8 +454,18 @@ public:
 
 		}
 	}
+
+	const Tool& getTool( ToolId id ) {
+		for( auto t : _tools ) {
+			if( t->toolId == id ) {
+				return *t;
+			}
+		}
+		throw runtime_error( "ToolBar::getTool(): Tool " + to_string( id ) + " not found." );
+	}
+
 private:
-	Fl_Button* createButton( int x, int y, const char *tooltip = 0,
+	Fl_Button* createButton( ToolId id, int x, int y, const char *tooltip = 0,
 			Fl_Callback *cb = 0, void *data = 0 )
 	{
 		begin();
@@ -414,6 +481,8 @@ private:
 			b->callback( cb, data );
 
 		end();
+		_tools.push_back( new Tool {id, b} );
+
 		return b;
 	}
 
@@ -438,6 +507,7 @@ private:
 	Fl_Box* _filler = NULL;
 	int _spacing_x = 4;
 	int _buttonsize = 32;
+	vector<Tool*> _tools;
 };
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //*+++++++++++++++++++++++  CONTROLLER  +++++++++++++++++++++++
@@ -461,7 +531,6 @@ public:
 	Controller( Scroll* scroll, ToolBar* toolbar ) : _scroll(scroll), _toolbar(toolbar) {
 		_scroll->setResizeCallback( onCanvasResize_static, this );
 		_scroll->setScrollCallback( onScrolled_static, this );
-		_toolbar->setAllPageButtonsEnabled( false );
 	}
 
 	~Controller() {
@@ -485,7 +554,12 @@ public:
 
 	static void onManageFolders_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
+		pThis->manageFolders();
+	}
 
+	static void onRenameFiles_static( Fl_Widget*, void* data ) {
+		Controller* pThis = (Controller*) data;
+		pThis->renameFiles();
 	}
 
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
@@ -512,6 +586,21 @@ public:
 			((Fl_Double_Window*)_scroll->parent())->label( title.c_str() );
 			/*get photos from selected dictionary*/
 			readPhotos( folder );
+			_toolbar->setManageFoldersButtonEnabled( true );
+
+			_folder.clear();
+			_folder.append( folder );
+		}
+	}
+
+	void renameFiles() {
+		int resp = fl_choice( "Rename all photos?\n"
+				              "Resulting filenames will be of format\nYYYYMMDD_TTTTTT",
+							  "No", "Yes", NULL );
+		if( resp == 1 ) {
+			_folderManager.renameFilesToDatetime( _folder.c_str() );
+			//todo: rename names in std::vector<PhotoInfo*> _photos;
+			//      and make them redraw
 		}
 	}
 
@@ -622,6 +711,13 @@ public:
 	}
 
 private:
+
+	void manageFolders() {
+		FolderDialog* dlg = new FolderDialog( 100, 100 );
+		dlg->show( true );
+	}
+
+
 	void loadPhoto( PhotoBox* box ) {
 		string pathnfile;
 		box->getPhotoPathnFile( pathnfile );
@@ -686,83 +782,9 @@ private:
 	int _photoIndexEnd = -1;
 	long _usedBytes = 0;
 	FolderManager _folderManager;
+	string _folder; //current folder whose photos are displayed
 };
 //*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-//void getDateTimeInfo( const string& result, string& datetime, size_t start ) {
-//	const string datetime_const = "Date/Time";
-//	size_t pos1 = result.find( datetime_const );
-//	size_t posX = result.find( ":", pos1 ) + 1;
-//	size_t posEOL = result.find( "\n", posX );
-//	int len = posEOL - posX;
-//	datetime = result.substr( posX, len );
-//}
-//
-//void splitPathnfile( const string& pathnfile, string& path, string& file ) {
-//	size_t pos = pathnfile.rfind( "/" );
-//	path = pathnfile.substr( 0, pos );
-//	int len = pathnfile.size() - pos - 1;
-//	file = pathnfile.substr( pos+1, len );
-//}
-//
-//void provideImageInfos( string& result ) {
-//	//my::StringHelper& sh = my::StringHelper::instance();
-//	size_t sz = result.size();
-//	const string filename = "File name";
-//
-//
-//	size_t pos1 = result.find( filename, 0 );
-//	while( pos1 != string::npos ) {
-//		size_t posSlash = result.find( "/", pos1 + 1 );
-//		size_t posEOL;
-//		if( posSlash != string::npos ) {
-//			posEOL = result.find( "\n", posSlash + 1 );
-//			if( posEOL != string::npos ) {
-//				ImageInfo* ii = new ImageInfo;
-//				int len = posEOL - posSlash;
-//				string pathnfile( result, posSlash, len );
-//				splitPathnfile( pathnfile, ii->folder, ii->filename );
-//				getDateTimeInfo( result, ii->datetime, posEOL + 1 );
-//				//fprintf( stderr, "found: %s\n", pathnfile.c_str() );
-//			} else {
-//				throw runtime_error( "FolderManager::provideImageInfos(): "
-//									 "Can't find end of line" );
-//			}
-//		} else {
-//			throw runtime_error( "FolderManager::provideImageInfos(): "
-//								 "Can't find start of path" );
-//		}
-//		pos1 = result.find( filename, posEOL + 1 );
-//	} // while
-//}
-//
-//#include <unistd.h>
-//#include <stdio.h>
-//void test_jhead() {
-////	string command = "jhead /home/martin/Projects/cpp/Phorg/testphotos/*.*";
-////	int rc = system( command.c_str() );
-//
-//	FILE* pipe;
-//	pipe = popen( "jhead /home/martin/Projects/cpp/Phorg/testphotos/*.*", "r" );
-//	if (!pipe) throw std::runtime_error( "popen() failed!" );
-//	char buffer[128];
-//	string result = "";
-//	try {
-//		while (fgets( buffer, sizeof buffer, pipe ) != NULL) {
-//			result += buffer;
-//		}
-//	} catch (...) {
-//		pclose( pipe );
-//		throw;
-//	}
-//	pclose( pipe );
-//
-//	fprintf( stderr, "here we go: %s\n", result.c_str() );
-//	provideImageInfos( result );
-//
-////	int rc = system( "jhead" );
-////	fprintf( stderr, "rc: %d\n", rc );
-//}
 
 /**
  * Application to get organization into your photos' folders.
@@ -770,7 +792,6 @@ private:
  * Sort them in a conveniant way based on their names or date of taking.
  */
 int main() {
-//	test_jhead();
 	// additional linker options: -lfltk_images -ljpeg -lpng
 	fl_register_images();
 	Fl_Double_Window *win =
@@ -778,15 +799,18 @@ int main() {
 
 	ToolBar* tb = new ToolBar( 0, 0, 500 );
 	Scroll* scroll = new Scroll( 0, tb->h(), 500, win->h() - tb->h() );
-
 	Controller ctrl( scroll, tb );
-	tb->addButton( open_xpm, "Choose photo folder", Controller::onOpen_static, &ctrl );
-	tb->addButton( manage_folders_xpm, "List, create and delete subfolders", Controller::onManageFolders_static, &ctrl );
-	tb->addButton( SYMBOL_LAST, FL_ALIGN_RIGHT, "Browse last page", Controller::onChangePage_static, &ctrl );
-	tb->addButton( SYMBOL_NEXT, FL_ALIGN_RIGHT, "Browse next page", Controller::onChangePage_static, &ctrl );
-	tb->addButton( SYMBOL_PREVIOUS, FL_ALIGN_RIGHT, "Browse previous page", Controller::onChangePage_static, &ctrl );
-	tb->addButton( SYMBOL_FIRST, FL_ALIGN_RIGHT, "Browse first page", Controller::onChangePage_static, &ctrl );
+	tb->addButton( ToolId::OPEN_FOLDER, open_xpm, "Choose photo folder", Controller::onOpen_static, &ctrl );
+	tb->addButton( ToolId::MANAGE_FOLDERS, manage_folders_xpm, "List, create and delete subfolders", Controller::onManageFolders_static, &ctrl );
+	tb->addButton( ToolId::LAST_PAGE, SYMBOL_LAST, FL_ALIGN_RIGHT, "Browse last page", Controller::onChangePage_static, &ctrl );
+	tb->addButton( ToolId::NEXT_PAGE, SYMBOL_NEXT, FL_ALIGN_RIGHT, "Browse next page", Controller::onChangePage_static, &ctrl );
+	tb->addButton( ToolId::PREVIOUS_PAGE, SYMBOL_PREVIOUS, FL_ALIGN_RIGHT, "Browse previous page", Controller::onChangePage_static, &ctrl );
+	tb->addButton( ToolId::FIRST_PAGE, SYMBOL_FIRST, FL_ALIGN_RIGHT, "Browse first page", Controller::onChangePage_static, &ctrl );
+	const char* f = "/home/martin/Projects/cpp/Phorg/images/rename_files.svg";
+	tb->addButton( ToolId::RENAME_FILES, f, "Rename all jpg files in folder", Controller::onRenameFiles_static, &ctrl );
 	tb->fixButtonsOnResize();
+	tb->setAllPageButtonsEnabled( false );
+	//tb->setManageFoldersButtonEnabled( false );
 	win->resizable( scroll );
 	win->end();
 	win->show();
