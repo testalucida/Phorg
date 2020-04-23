@@ -20,7 +20,7 @@
 #include "../images/manage_folders.xpm"
 
 #include "std.h"
-
+#include "const.h"
 #include "FolderManager.hpp"
 #include "FolderDialog.hpp"
 
@@ -117,6 +117,7 @@ public:
 	}
 
 	~PhotoBox() {
+		//fprintf( stderr, "delete PhotoBox %s with its image.\n", _file.c_str() );
 		Fl_Image* img;
 		if( ( img = image() ) != NULL ) {
 			delete img;
@@ -344,6 +345,12 @@ public:
 		end();
 	}
 
+	~ToolBar() {
+		for( auto t : _tools ) {
+			delete t;
+		}
+	}
+
 	/**
 	 * Adds a button to the right side of the most right button on the left side of the toolbar.
 	 */
@@ -435,7 +442,15 @@ public:
 		} else {
 			t.btn->deactivate();
 		}
+	}
 
+	void setRenameFilesButtonEnabled( bool enable ) {
+		const Tool& t = getTool( ToolId::RENAME_FILES );
+		if( enable ) {
+			t.btn->activate();
+		} else {
+			t.btn->deactivate();
+		}
 	}
 
 	/** inserts a resizable dummy boy which prevents buttons from
@@ -555,7 +570,7 @@ public:
 
 	static void onManageFolders_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
-		pThis->manageFolders();
+		pThis->showFolderDialog();
 	}
 
 	static void onRenameFiles_static( Fl_Widget*, void* data ) {
@@ -588,6 +603,7 @@ public:
 			/*get photos from selected dictionary*/
 			readPhotos( folder );
 			_toolbar->setManageFoldersButtonEnabled( true );
+			_toolbar->setRenameFilesButtonEnabled( true );
 
 			_folder.clear();
 			_folder.append( folder );
@@ -617,14 +633,14 @@ public:
 
 	void reset() {
 		removePhotosFromCanvas();
-		_photos.clear();
+		//_photos.clear();
+		deletePhotoInfos();
 		_usedBytes = 0;
 		_photoIndexStart = -1;
 		_photoIndexEnd = -1;
 	}
 
 	void addImageFile( const char* folder, const char* filename, const char* datetime ) {
-		//todo: delete PhotoInfos in controller's destructor
 		PhotoInfo* pinfo = new PhotoInfo;
 		pinfo->folder.append( folder );
 		pinfo->filename.append( filename );
@@ -633,8 +649,15 @@ public:
 	}
 
 	void layoutPhotos( Page page ) {
+//		fprintf( stderr, "*********** clocking start in layoutPhotos ************\n" );
+//		my::Timer timer;
+
 		//remove and destroy all previous PhotoBoxes
+//		timer.start();
 		removePhotosFromCanvas();
+//		timer.stop();
+//		fprintf( stderr, "time needed for removePhotosFromCanvas: %s\n",
+//						         timer.durationToString());
 		_usedBytes = 0;
 
 		int X = _scroll->x() + _spacing_x;
@@ -644,6 +667,7 @@ public:
 		//calculate photo index to start and to end with
 		setStartAndEndIndexes( page );
 
+//		timer.start();
 		auto itr = _photos.begin() + _photoIndexStart;
 		int idx = _photoIndexStart;
 		for(  ; itr != _photos.end() && idx <= _photoIndexEnd; itr++, idx++ ) {
@@ -667,8 +691,12 @@ public:
 			X += ( _box_w + _spacing_x );
 			n++;
 		} //for
+//		timer.stop();
+//		fprintf( stderr, "time needed for for loop creating PhotoBoxes: %s\n",
+//						         timer.durationToString());
 		adjustPageButtons();
 		_scroll->redraw();
+//		fprintf( stderr, "*********** layoutPhotos: clocking end ************\n" );
 	}
 
 	/** Remove and destroy all photos from canvas (scroll area). */
@@ -721,9 +749,27 @@ public:
 
 private:
 
-	void manageFolders() {
-		FolderDialog* dlg = new FolderDialog( 100, 100 );
+	void showFolderDialog() {
+		FolderDialog* dlg = new FolderDialog( 100, 100, _folder.c_str() );
+		dlg->setCreateFolderCallback( FolderManager::onCreateFolders,
+				                      &_folderManager );
+		string folder = _folder;
+		folder.append( "/" );
+		string checkfolder = GARBAGE_FOLDER;
+		if( _folderManager.existsFolder( (folder + checkfolder).c_str() ) ) {
+			dlg->setFolderCheckBoxActive( Folder::GARBAGE, false );
+		}
+		checkfolder = GOOD_FOLDER;
+		if( _folderManager.existsFolder( (folder + checkfolder).c_str() ) ) {
+			dlg->setFolderCheckBoxActive( Folder::GOOD, false );
+		}
+		checkfolder = DUNNO_FOLDER;
+		if( _folderManager.existsFolder( (folder + checkfolder).c_str() ) ) {
+			dlg->setFolderCheckBoxActive( Folder::DUNNO, false );
+		}
+
 		dlg->show( true );
+		delete dlg;
 	}
 
 
@@ -795,12 +841,59 @@ private:
 };
 //*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+#include "sys/types.h"
+#include "sys/sysinfo.h"
+
+int parseLine(char* line){
+    // This assumes that a digit will be found and the line ends in " Kb".
+    int i = strlen(line);
+    const char* p = line;
+    while (*p <'0' || *p > '9') p++;
+    line[i-3] = '\0';
+    i = atoi(p);
+    return i;
+}
+
+int g_used_kb = 0;
+long long g_physmem_used = 0;
+
+int getUsedMemory() { //Note: this value is in KB!
+    FILE* file = fopen("/proc/self/status", "r");
+    int result = -1;
+    char line[128];
+
+    while (fgets(line, 128, file) != NULL){
+//        if (strncmp(line, "VmSize:", 7) == 0){ //Virtual Memory currently used by current process
+    	if (strncmp(line, "VmRSS:", 6) == 0) { //Physical Memory currently used by current process
+            result = parseLine(line);
+            break;
+        }
+    }
+    fclose(file);
+    return result;
+}
+
+void checkMemory() {
+	g_used_kb = getUsedMemory();
+	struct sysinfo memInfo;
+	sysinfo (&memInfo);
+	long long totalVirtualMem = memInfo.totalram;
+	//Add other values in next statement to avoid int overflow on right hand side...
+	totalVirtualMem += memInfo.totalswap;
+	totalVirtualMem *= memInfo.mem_unit;
+	long long physMemUsed = memInfo.totalram - memInfo.freeram;
+	//Multiply in next statement to avoid int overflow on right hand side...
+	physMemUsed *= memInfo.mem_unit;
+	g_physmem_used = physMemUsed;
+}
+
 /**
  * Application to get organization into your photos' folders.
  * View photo, delete it or move or copy it into another folder quickly.
  * Sort them in a conveniant way based on their names or date of taking.
  */
 int main() {
+	checkMemory();
 	// additional linker options: -lfltk_images -ljpeg -lpng
 	fl_register_images();
 	Fl_Double_Window *win =
@@ -819,10 +912,18 @@ int main() {
 	tb->addButton( ToolId::RENAME_FILES, f, "Rename all jpg files in folder", Controller::onRenameFiles_static, &ctrl );
 	tb->fixButtonsOnResize();
 	tb->setAllPageButtonsEnabled( false );
-	//tb->setManageFoldersButtonEnabled( false );
+	tb->setManageFoldersButtonEnabled( false );
+	tb->setRenameFilesButtonEnabled( false );
 	win->resizable( scroll );
 	win->end();
 	win->show();
 
-	return Fl::run();
+	int rc = Fl::run();
+	int used_kb = g_used_kb;
+	long long physmem_used = g_physmem_used;
+	checkMemory();
+	fprintf( stderr, "*************End of program***************\n" );
+	fprintf( stderr, "Delta used_kb: %d\n", g_used_kb - used_kb );
+	fprintf( stderr, "Delta physmem_used: %lld \n", g_physmem_used - physmem_used );
+	return rc;
 }

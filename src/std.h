@@ -12,6 +12,11 @@
 #include <vector>
 #include <iostream>
 #include <cstdio>
+#include <stdexcept>
 
+#include <my/StringHelper.h>
+#include <my/timer.h>
+
+using namespace std;
 
 #endif /* STD_H_ */

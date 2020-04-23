@@ -9,11 +9,12 @@
 #define FOLDERMANAGER_HPP_
 
 #include "std.h"
-#include <my/StringHelper.h>
+#include "const.h"
 #include <FL/Fl_Native_File_Chooser.H>
 #include <stdexcept>
 #include <algorithm>
 #include <unistd.h>
+#include <sys/stat.h>
 
 using namespace std;
 
@@ -38,7 +39,9 @@ public:
 		_fileChooser.type( Fl_Native_File_Chooser::BROWSE_DIRECTORY );
 	}
 
-	~FolderManager() {}
+	~FolderManager() {
+		clearImages();
+	}
 
 	const char* chooseFolder() {
 		// Show file chooser
@@ -77,18 +80,33 @@ public:
 			                       bool rotate = true,
 								   Sort sort = Sort::SORT_ASC )
     {
+//		fprintf( stderr, "*********** clocking start in getImages ************\n" );
+//		my::Timer timer;
 		clearImages();
 
+//		timer.start();
 		if( rotate ) {
 			rotateImages( folder );
 		}
+//		timer.stop();
+//		fprintf( stderr, "time needed for rotateImages: %s\n",
+//				         timer.durationToString());
 
+//		timer.start();
 		collectImageInfos( folder );
+//		timer.stop();
+//		fprintf( stderr, "time needed for collectImageInfos: %s\n",
+//						         timer.durationToString());
 
+//		timer.start();
 		if( sort != Sort::SORT_NONE ) {
 			sortImages( sort );
 		}
-
+//		timer.stop();
+//		fprintf( stderr, "time needed for sortImages: %s\n",
+//						         timer.durationToString());
+//
+//		fprintf( stderr, "*********** getImages: clocking end ************\n" );
 		return _images;
 	}
 
@@ -123,6 +141,60 @@ public:
 			string msg = "Error on moving file from " + current + " to " + dest;
 			throw runtime_error( "FolderManager::moveFile(): " + msg );
 		}
+	}
+
+	static void onCreateFolders( bool garbage, bool good, bool dunno, const char* other, void* data ) {
+		FolderManager* pThis = (FolderManager*) data;
+		if ( garbage ) {
+			pThis->createFolder( GARBAGE_FOLDER );
+		}
+		if( good ) {
+			pThis->createFolder( GOOD_FOLDER );
+		}
+		if( dunno ) {
+			pThis->createFolder( DUNNO_FOLDER );
+		}
+		if( other ) {
+			pThis->createFolder( other );
+		}
+	}
+
+	void getFolders( const char* parent, vector<string>& folders ) const {
+		DIR *dir;
+		struct dirent *ent;
+		if ( (dir = opendir( parent )) != NULL ) {
+			/* print all the files and directories within directory */
+			while ( (ent = readdir( dir )) != NULL ) {
+				string sub = ent->d_name;
+				folders.push_back( sub );
+			}
+			closedir( dir );
+		} else {
+			string msg = "FolderManager::getFolders(): can't read ";
+			msg.append( parent );
+			/* could not open directory */
+			perror( "Error reading directories" );
+			throw runtime_error( msg );
+		}
+	}
+
+	bool existsFolder( const char* folder ) const {
+		struct stat buffer;
+		return ( stat( folder, &buffer) == 0 );
+	}
+
+	void createFolder( const char* name ) const {
+		int temp = umask( 0 );
+		string folder = _folder;
+		folder.append( "/" );
+		folder.append( name );
+		if ( mkdir( folder.c_str(), 0777 ) != 0 ) {
+			string msg = "FolderManager::createFolder(): Error creating folder ";
+			msg.append( name );
+			perror( msg.c_str() );
+			throw runtime_error( msg );
+		}
+		umask( temp );
 	}
 
 private:
