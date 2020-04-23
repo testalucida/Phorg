@@ -8,16 +8,20 @@
 #ifndef FOLDERDIALOG_HPP_
 #define FOLDERDIALOG_HPP_
 
+#include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>
 #include <FL/Fl_Return_Button.H>
 #include <FL/Fl_Button.H>
+#include <FL/Fl_Browser.H>
 //#include <FL/Fl_Check_Button.H>
 #include <fltk_ext/FlxCheckButton.h>
 
 #include "std.h"
+#include "const.h"
 
 static const int W = 415;
-static const int H = 300;
+//static const int H = 300;
+static const int H = 420;
 
 enum Folder {
 	GARBAGE,
@@ -29,12 +33,12 @@ typedef void (*CreateFolderCallback) ( bool createGarbage, bool createGood, bool
 
 class FolderDialog: public Fl_Double_Window {
 public:
-	FolderDialog( int X, int Y, const char* currentFolder = NULL ) :
+	FolderDialog( int X, int Y, const char* currentFolder ) :
 		Fl_Double_Window( X, Y, W, H, "Manage Folders" )
 	{
-		if( currentFolder ) {
-			_currentFolder.append( currentFolder );
-		}
+
+		_currentFolder.append( currentFolder );
+
 		box( FL_FLAT_BOX );
 		color(FL_LIGHT2);
 
@@ -48,6 +52,13 @@ public:
 		int h = 25;
 		int w = W - 2*margin_x;
 
+		_browserLabel += "\n" + _currentFolder;
+		new Fl_Box( x, y, W - 2*margin_x, 2*h, _browserLabel.c_str() );
+		y += 2*h + 5;
+		_browser = new Fl_Browser( x, y, W - 2*margin_x, 100 );
+		_browser->end();
+
+		y += _browser->h() + spacing_y;
 		_cbGarbage = createCheckButton( x, y, w, h,
 				 "  Create garbage folder.\n"
 				 "  Photos you'll delete will be put there.", Folder::GARBAGE );
@@ -81,7 +92,15 @@ public:
 		btn->callback( onCreateOtherFolder_static, this );
 
 		x = margin_x;
-		y += h + 2*spacing_y;
+		y = btn->y() + btn->h() + 2*spacing_y;
+		_statusbox = new Fl_Box( x, y, W -2*margin_x, 25 );
+		_statusbox->box( FL_THIN_DOWN_BOX );
+		_statusbox->color( FL_LIGHT2 );
+		_statusbox->align( FL_ALIGN_INSIDE | FL_ALIGN_LEFT );
+
+		setStatus( "Ready." );
+
+		y = _statusbox->y() + _statusbox->h() + 2*spacing_y;
 		btn = createButton( x, y, 72, 25, "Close" );
 		btn->callback( staticOkCancel_cb, this );
 
@@ -91,6 +110,12 @@ public:
 	}
 
 	~FolderDialog() {}
+
+	void setFolders( const vector<string>& folders ) {
+		for( auto f : folders ) {
+			_browser->add( f.c_str() );
+		}
+	}
 
 	void setCreateFolderCallback( CreateFolderCallback cb, void* data ) {
 		_cfcb = cb;
@@ -121,6 +146,21 @@ public:
 	}
 
 private:
+	void setStatus( const char* msg ) {
+		_statusbox->label( msg );
+		Fl::add_timeout( 3.0, resetStatus_static, this );
+	}
+
+	static void resetStatus_static( void* data ) {
+		FolderDialog* dlg = (FolderDialog*) data;
+		dlg->resetStatus();
+	}
+
+	void resetStatus() {
+		_statusbox->label( "" );
+		_status.clear();
+	}
+
 	static void onCreateFolder_static( Fl_Widget*, void* data ) {
 		FolderDialog* pThis = (FolderDialog*)data;
 		pThis->doCreateFolderCallback();
@@ -139,19 +179,29 @@ private:
 			(_cfcb)( garb, good, dunno, NULL, _cf_data );
 			if( garb ) {
 				_cbGarbage->deactivate();
+				_browser->add( GARBAGE_FOLDER );
 			}
 			if( good ) {
 				_cbGood->deactivate();
+				_browser->add( GOOD_FOLDER );
 			}
 			if( dunno ) {
 				_cbDunno->deactivate();
+				_browser->add( DUNNO_FOLDER );
 			}
+			if( garb || good || dunno ) setStatus( "Folders created." );
+			else setStatus( "No folders to create." );
 		}
 	}
 
 	void doCreateOtherFolderCallback( const char* folder ) {
 			if( _cfcb ) {
 				(_cfcb)( false, false, false, folder, _cf_data );
+				_status = "Created folder ";
+				_status.append( folder );
+				_status.append( "." );
+				_browser->add( folder );
+				setStatus( _status.c_str() );
 			}
 		}
 
@@ -214,10 +264,14 @@ private:
 
 private:
 	string _currentFolder;
+	string _browserLabel = "Existing folders in ";
+	Fl_Browser* _browser = NULL;
 	FlxCheckButton* _cbGarbage = NULL;
 	FlxCheckButton* _cbGood = NULL;
 	FlxCheckButton* _cbDunno = NULL;
+	Fl_Box* _statusbox;
 	string _note = "All folders will be created within the chosen photo folder";
+	string _status;
 	CreateFolderCallback _cfcb = NULL;
 	void* _cf_data = NULL;
 };

@@ -753,6 +753,9 @@ private:
 		FolderDialog* dlg = new FolderDialog( 100, 100, _folder.c_str() );
 		dlg->setCreateFolderCallback( FolderManager::onCreateFolders,
 				                      &_folderManager );
+		vector<string> folders;
+		_folderManager.getFolders( _folder.c_str(), folders );
+		dlg->setFolders( folders );
 		string folder = _folder;
 		folder.append( "/" );
 		string checkfolder = GARBAGE_FOLDER;
@@ -896,11 +899,13 @@ int main() {
 	checkMemory();
 	// additional linker options: -lfltk_images -ljpeg -lpng
 	fl_register_images();
+	int w = 1250;
+	int h = 470;
 	Fl_Double_Window *win =
-			new Fl_Double_Window(200, 200, 500, 500, "Photo Organization" );
+			new Fl_Double_Window(200, 200, w, h, "Photo Organization" );
 
-	ToolBar* tb = new ToolBar( 0, 0, 500 );
-	Scroll* scroll = new Scroll( 0, tb->h(), 500, win->h() - tb->h() );
+	ToolBar* tb = new ToolBar( 0, 0, w );
+	Scroll* scroll = new Scroll( 0, tb->h(), w, win->h() - tb->h() );
 	Controller ctrl( scroll, tb );
 	tb->addButton( ToolId::OPEN_FOLDER, open_xpm, "Choose photo folder", Controller::onOpen_static, &ctrl );
 	tb->addButton( ToolId::MANAGE_FOLDERS, manage_folders_xpm, "List, create and delete subfolders", Controller::onManageFolders_static, &ctrl );

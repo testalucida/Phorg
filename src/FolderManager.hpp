@@ -163,11 +163,13 @@ public:
 		DIR *dir;
 		struct dirent *ent;
 		if ( (dir = opendir( parent )) != NULL ) {
-			/* print all the files and directories within directory */
 			while ( (ent = readdir( dir )) != NULL ) {
-				string sub = ent->d_name;
-				folders.push_back( sub );
+				if( ent->d_type == DT_DIR && ent->d_name[0] != '.' ) {
+					string sub = ent->d_name;
+					folders.push_back( sub );
+				}
 			}
+			sort( folders.begin(), folders.end() );
 			closedir( dir );
 		} else {
 			string msg = "FolderManager::getFolders(): can't read ";
