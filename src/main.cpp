@@ -138,26 +138,12 @@ public:
 		redraw();
 	}
 
-	void getPhotoPathnFile( string& pathnfile ) const {
-		pathnfile = _folder;
-		pathnfile.append( "/" );
-		pathnfile.append( _file );
+	const string& getPhotoPathnFile() const {
+		_pathnfile = _folder;
+		_pathnfile.append( "/" );
+		_pathnfile.append( _file );
+		return _pathnfile;
 	}
-
-//	int handle( int evt ) {
-//		int rc = Fl_Box::handle( evt );
-//		switch( evt ) {
-//		case FL_PUSH:
-//			_isSelected = true;
-//			redraw();
-//			rc = 1;
-//			break;
-//		default:
-//			break;
-//		}
-//
-//		return rc;
-//	}
 
 protected:
 	void draw() {
@@ -214,6 +200,7 @@ protected:
 private:
 	string _folder;
 	string _file;
+	mutable string _pathnfile;
 	string _datetime;
 	Fl_Font _font = FL_HELVETICA;
 	Fl_Fontsize _fontsize = 12;
@@ -226,12 +213,14 @@ private:
 //++++++++++++++++++    SCROLL    +++++++++++++++++++++++++++
 typedef void (*ResizeCallback) ( int x, int y, int w, int h, void* data );
 typedef void (*ScrollCallback) ( int xpos, int ypos, void* data );
+typedef void (*ClickCallback)  ( PhotoBox*, bool rightMouseButton, bool doubleClick, void* );
 
 class Scroll : public Fl_Scroll {
 public:
 	Scroll( int x, int y, int w, int h ) : Fl_Scroll( x, y, w, h ) {
 		box( FL_FLAT_BOX );
 		color( FL_BLACK );
+
 		end();
 	}
 
@@ -243,6 +232,11 @@ public:
 	void setScrollCallback( ScrollCallback cb, void* data ) {
 		_scroll_cb = cb;
 		_scroll_cb_data = data;
+	}
+
+	void setPhotoBoxClickedCallback( ClickCallback cb, void* data ) {
+		_click_cb = cb;
+		_click_cb_data = data;
 	}
 
 	void resize( int x, int y, int w, int h ) {
@@ -265,8 +259,11 @@ public:
 			PhotoBox* box = dynamic_cast<PhotoBox*>( w );
 			if( box ) {
 				box->setSelected( true );
-				if( Fl::event_clicks() ) {
-					zoom( box );
+				if( _click_cb ) {
+					(_click_cb)( box,
+							     (Fl::event_button2() != 0),
+							     (Fl::event_clicks() != 0),
+								 _click_cb_data );
 				}
 			}
 			_pushed = true;
@@ -311,15 +308,13 @@ public:
 		}
 	}
 
-	void zoom( PhotoBox* box ) {
-
-	}
-
 private:
 	ResizeCallback _resize_cb = NULL;
 	void* _resize_cb_data = NULL;
 	ScrollCallback _scroll_cb = NULL;
 	void* _scroll_cb_data = NULL;
+	ClickCallback _click_cb = NULL;
+	void* _click_cb_data = NULL;
 	bool _pushed = false;
 	int _ypos_old = 0, _xpos_old = 0;
 };
@@ -557,6 +552,7 @@ public:
 	Controller( Scroll* scroll, ToolBar* toolbar ) : _scroll(scroll), _toolbar(toolbar) {
 		_scroll->setResizeCallback( onCanvasResize_static, this );
 		_scroll->setScrollCallback( onScrolled_static, this );
+		_scroll->setPhotoBoxClickedCallback( onPhotoBoxClicked_static, this );
 		_scroll->scrollbar.linesize( 80 );
 	}
 
@@ -604,6 +600,24 @@ public:
 		}
 	}
 
+	static void onPhotoBoxClicked_static( PhotoBox* box,
+			                              bool rightMouse,
+										  bool doubleClick,
+										  void* data )
+	{
+		Controller* pThis = (Controller*) data;
+		pThis->onPhotoBoxClicked( box, rightMouse, doubleClick );
+	}
+
+	void onPhotoBoxClicked( PhotoBox* box, bool rightMouse, bool doubleClick ) {
+		//todo
+		if( !rightMouse && doubleClick ) {
+			//zoom Image in FlxDialog
+		} else if( rightMouse && !doubleClick ) {
+			//show context menu
+		}
+	}
+
 	void openFolder() {
 		const char* folder = _folderManager.chooseFolder();
 		if( folder ) {
@@ -611,8 +625,10 @@ public:
 			title.append( ": " );
 			title.append( folder );
 			((Fl_Double_Window*)_scroll->parent())->label( title.c_str() );
+
 			/*get photos from selected dictionary*/
 			readPhotos( folder );
+
 			_toolbar->setManageFoldersButtonEnabled( true );
 			_toolbar->setRenameFilesButtonEnabled( true );
 
@@ -786,11 +802,8 @@ private:
 		delete dlg;
 	}
 
-
 	void loadPhoto( PhotoBox* box ) {
-		string pathnfile;
-		box->getPhotoPathnFile( pathnfile );
-		Fl_JPEG_Image* jpg = new Fl_JPEG_Image( pathnfile.c_str() );
+		Fl_JPEG_Image* jpg = new Fl_JPEG_Image( box->getPhotoPathnFile().c_str() );
 		jpg->scale( _box_w, _box_h, 1, 1 );
 		_usedBytes += getPhotoSize( jpg );
 		box->image( jpg );
@@ -902,9 +915,10 @@ void checkMemory() {
 }
 
 void showDialog( Fl_Widget*, void* ) {
-	FlxDialog* dlg = new FlxDialog( 100, 100, 500, 500, "Test Dialog");
+	FlxDialog* dlg = new FlxDialog( 400, 400, 500, 500, "Test Dialog");
 	Fl_Group* grp = dlg->createClientAreaGroup( FL_FLAT_BOX, FL_RED );
-	int rc = dlg->show( true );
+	dlg->resizable( grp );
+	int rc = dlg->show( false );
 	fprintf( stderr, "RC: %d\n", rc );
 }
 
@@ -939,7 +953,7 @@ int test() {
  * Sort them in a conveniant way based on their names or date of taking.
  */
 int main() {
-	return test();
+	//return test();
 	checkMemory();
 	// additional linker options: -lfltk_images -ljpeg -lpng
 	fl_register_images();
