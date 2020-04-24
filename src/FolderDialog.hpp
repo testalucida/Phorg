@@ -195,15 +195,15 @@ private:
 	}
 
 	void doCreateOtherFolderCallback( const char* folder ) {
-			if( _cfcb ) {
-				(_cfcb)( false, false, false, folder, _cf_data );
-				_status = "Created folder ";
-				_status.append( folder );
-				_status.append( "." );
-				_browser->add( folder );
-				setStatus( _status.c_str() );
-			}
+		if( _cfcb ) {
+			(_cfcb)( false, false, false, folder, _cf_data );
+			_status = "Created folder ";
+			_status.append( folder );
+			_status.append( "." );
+			_browser->add( folder );
+			setStatus( _status.c_str() );
 		}
+	}
 
 	void doCreateOtherFolderCallback() {
 		const char* folder = fl_input( "Enter folder's name: " );

@@ -15,6 +15,7 @@
 #include <fltk_ext/Canvas.h>
 #include <fltk_ext/DragBox.h>
 #include <fltk_ext/TextMeasure.h>
+#include <fltk_ext/FlxDialog.h>
 
 #include "../images/open.xpm"
 #include "../images/manage_folders.xpm"
@@ -256,11 +257,17 @@ public:
 		//fprintf( stderr, "Scroll::handle -- evt = %d, %s\n", evt, fl_eventnames[evt] );
 		switch( evt ) {
 		case FL_PUSH: {
-			unselectAll();
+			bool shift_pressed = Fl::event_key(FL_Shift_L);
+			if( !shift_pressed ) {
+				unselectAll();
+			}
 			Fl_Widget* w = Fl::belowmouse();
 			PhotoBox* box = dynamic_cast<PhotoBox*>( w );
 			if( box ) {
 				box->setSelected( true );
+				if( Fl::event_clicks() ) {
+					zoom( box );
+				}
 			}
 			_pushed = true;
 			return 1;
@@ -302,6 +309,10 @@ public:
 				box->setSelected( false );
 			}
 		}
+	}
+
+	void zoom( PhotoBox* box ) {
+
 	}
 
 private:
@@ -890,12 +901,45 @@ void checkMemory() {
 	g_physmem_used = physMemUsed;
 }
 
+void showDialog( Fl_Widget*, void* ) {
+	FlxDialog* dlg = new FlxDialog( 100, 100, 500, 500, "Test Dialog");
+	Fl_Group* grp = dlg->createClientAreaGroup( FL_FLAT_BOX, FL_RED );
+	int rc = dlg->show( true );
+	fprintf( stderr, "RC: %d\n", rc );
+}
+
+int test() {
+	Fl_Double_Window *win =	new Fl_Double_Window(200, 200, 300, 400, "TEST" );
+	win->box( FL_FLAT_BOX );
+	win->color( FL_LIGHT2 );
+	int margin_x = 10;
+	int spacing_x = 5;
+	int margin_y = 10;
+	int btn_w = 70;
+	int btn_h = 25;
+	int btn_x = win->w() - 2*btn_w - spacing_x - margin_x;
+	int btn_y = win->h() - btn_h - margin_y;
+	Fl_Return_Button* btnOk = new Fl_Return_Button( btn_x, btn_y, btn_w, btn_h, "OK" );
+	btnOk->box( FL_THIN_UP_BOX );
+	btnOk->down_box( FL_THIN_DOWN_BOX );
+	btnOk->color( (Fl_Color) 53 );
+	btnOk->down_color( FL_LIGHT1 );
+	btnOk->clear_visible_focus();
+	btnOk->callback( showDialog, NULL );
+	btn_x += btn_w + spacing_x;
+	Fl_Button* btnCancel = new Fl_Button( btn_x, btn_y, btn_w, btn_h, "Cancel" );
+	win->end();
+	win->show();
+	return Fl::run();
+}
+
 /**
  * Application to get organization into your photos' folders.
  * View photo, delete it or move or copy it into another folder quickly.
  * Sort them in a conveniant way based on their names or date of taking.
  */
 int main() {
+	return test();
 	checkMemory();
 	// additional linker options: -lfltk_images -ljpeg -lpng
 	fl_register_images();
