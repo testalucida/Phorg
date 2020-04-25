@@ -9,6 +9,7 @@
 #include <FL/names.h>
 #include <FL/Fl_Pack.H>
 #include <FL/Fl_Button.H>
+#include <FL/Fl_Toggle_Button.H>
 #include <FL/Fl_Native_File_Chooser.H>
 #include <FL/Fl_SVG_Image.H>
 #include <FL/fl_ask.H>
@@ -32,75 +33,114 @@
 
 using namespace std;
 
-class Box: public DragBox {
+class Box: public Fl_Box {
 public:
-	Box( int x, int y, int w, int h ) : DragBox( x, y, w, h ), _X(x) {
-		box( FL_UP_BOX );
+	Box( int x, int y, int w, int h ) : Fl_Box( x, y, w, h ) {
+		box( FL_FLAT_BOX );
 		color( FL_LIGHT2 );
 	}
 
+	~Box() {
+		Fl_Image* img;
+		if( ( img = image() ) != NULL ) {
+			delete img;
+		}
+	}
+
+//	int handle( int evt ) {
+//		int rc = Fl_Box::handle( evt );
+//		//const char* evtname = fl_eventnames[evt];
+//		//fprintf( stderr, "evt: %d -- %s\n", evt, evtname );
+//		switch( evt ) {
+//		case FL_MOUSEWHEEL: { //FL_MOUSEWHEEL - 19
+//			if( Fl::belowmouse() == this ) {
+//				fprintf( stderr, "dx: %d, dy: %d\n", Fl::event_dx(), Fl::event_dy() );
+//				_zoom += ( 0.2 * Fl::event_dy() );
+//				_zoom = ( _zoom < 0.2 ) ? 0.2 : _zoom;
+//				int W = round( (float)w() * _zoom );
+//				int H = round( (float)h() * _zoom );
+//				image()->scale( W, H, 1, 1 );
+//				resize( x(), y(), image()->w(), image()->h() );
+//				parent()->redraw();
+//			}
+//			return 1;
+//		}
+//		default:
+//			return rc;
+//		}
+//	}
+
 	void resize( int x, int y, int w, int h ) {
 		Fl_Box::resize( x, y, w, h );
-		fprintf( stderr, "Box::resize: %d, %d, %d, %d\n", x, y, w, h );
-		image()->scale( round( float(w) * _zoom ), round( (float)h * _zoom ), 1, 1 );
-//		float rel = (float)image()->data_w() / (float)image()->data_h();
-//		fprintf( stderr, "data_w: %d, data_h: %d\n",
-//				image()->data_w(), image()->data_h() );
-//		float draw_h = w / rel;
-////		fprintf( stderr, "rel: %f, draw_h: %f\n", rel, draw_h );
-//		int W = round( w * _zoom );
-//		int H = round( draw_h * _zoom );
-////		float W_H = (float)W / (float)H;
-////		fprintf( stderr, "scaling: W = %d, H = %d, W_H = %f\n", W, H, W_H );
-//		image()->scale( W, H, 1, 1 );
-	}
-
-	void setZoom( float zoom ) {
-		_zoom = zoom;
-		resize( x(), y(), w(), h() );
-	}
-
-	int handle( int evt ) {
-		int rc = DragBox::handle( evt );
-		//const char* evtname = fl_eventnames[evt];
-		//fprintf( stderr, "evt: %d -- %s\n", evt, evtname );
-		switch( evt ) {
-		case FL_MOUSEWHEEL: { //FL_MOUSEWHEEL - 19
-			if( Fl::belowmouse() == this ) {
-				fprintf( stderr, "dx: %d, dy: %d\n", Fl::event_dx(), Fl::event_dy() );
-				_zoom += ( 0.2 * Fl::event_dy() );
-				_zoom = ( _zoom < 0.2 ) ? 0.2 : _zoom;
-				int W = round( (float)w() * _zoom );
-				int H = round( (float)h() * _zoom );
-				image()->scale( W, H, 1, 1 );
-				resize( x(), y(), image()->w(), image()->h() );
-				parent()->redraw();
-			}
-			return 1;
-		}
-		default:
-			return rc;
+		Fl_Image* img = image();
+		if( img ) {
+			image()->scale( this->w(), this->h(), 1, 1 );
 		}
 	}
-protected:
-	void draw() {
-		DragBox::draw();
-	}
-	void draw_custom() {}
+
 private:
 	float _zoom = 1;
-	int _X;
+
 }; //class Box
+
+class ImageFactory {
+public:
+	static ImageFactory& inst() {
+		static ImageFactory* pThis = NULL;
+		if( !pThis ) {
+			pThis = new ImageFactory();
+		}
+		return *pThis;
+	}
+
+	Fl_SVG_Image* getRed() const {
+		return _svg_red;
+	}
+	Fl_SVG_Image* getYellow() const {
+		return _svg_red;
+	}
+	Fl_SVG_Image* getGreen() const {
+		return _svg_red;
+	}
+
+	Fl_SVG_Image* getPaleRed() const {
+		return _svg_pale_red;
+	}
+	Fl_SVG_Image* getPaleYellow() const {
+		return _svg_pale_yellow;
+	}
+	Fl_SVG_Image* getPaleGreen() const {
+		return _svg_pale_green;
+	}
+private:
+	ImageFactory() {
+		_svg_red = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/red.svg" );
+		_svg_yellow = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/yellow.svg" );
+		_svg_green = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/green.svg" );
+		_svg_pale_red = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/pale_red.svg" );
+		_svg_pale_yellow = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/pale_yellow.svg" );
+		_svg_pale_green = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/pale_green.svg" );
+	}
+
+private:
+	Fl_SVG_Image* _svg_red = NULL;
+	Fl_SVG_Image* _svg_yellow = NULL;
+	Fl_SVG_Image* _svg_green = NULL;
+	Fl_SVG_Image* _svg_pale_red = NULL;
+	Fl_SVG_Image* _svg_pale_yellow = NULL;
+	Fl_SVG_Image* _svg_pale_green = NULL;
+};
+
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 const long MAX_MEM_USAGE = 800000000;
 //const long MAX_MEM_USAGE = 100000000;
 //+++++++++++++++++    PHOTOBOX   +++++++++++++++++++++++++++
-class PhotoBox : public Fl_Box {
+class PhotoBox : public Fl_Group { // Fl_Box {
 public:
 	PhotoBox( int x, int y, int w, int h,
 			const char* folder = NULL, const char* file = NULL, const char* datetime = NULL ) :
-		Fl_Box( x, y, w, h )
+		Fl_Group( x, y, w, h )
 	{
 		if( folder ) _folder.append( folder );
 		if( file ) {
@@ -115,23 +155,50 @@ public:
 
 		box( FL_FLAT_BOX );
 		color( FL_LIGHT1 );
+
+		_box = new Box( x, y, w, h );
+
+		int xc = this->x() + this->w()/2;
+		int btn_w = 30;
+		int btn_h = 30;
+		int spacing_x = 5;
+		int x1 = xc - 50;
+		_btnRed = newToggleButton( x1, y + 1, btn_w, btn_h,
+				                   ImageFactory::inst().getPaleRed(), FL_RED );
+		x1 += btn_w + spacing_x;
+		_btnYellow = newToggleButton( x1, y + 1, btn_w, btn_h,
+				                      ImageFactory::inst().getPaleYellow(), FL_YELLOW );
+		x1 += btn_w + spacing_x;
+		_btnGreen = newToggleButton( x1, y + 1, btn_w, btn_h,
+				                     ImageFactory::inst().getPaleGreen(), FL_GREEN );
+		end();
+
+	}
+
+	Fl_Toggle_Button* newToggleButton( int x, int y, int w, int h,
+								       Fl_Image* img, Fl_Color down_color )
+	{
+		Fl_Toggle_Button* btn = new Fl_Toggle_Button( x, y, w, h );
+		btn->box( FL_FLAT_BOX );
+		btn->color( FL_LIGHT2 );
+		btn->clear_visible_focus();
+		img->scale( w, h, 1, 1 );
+		btn->image( img );
+		btn->down_color( down_color );
+		return btn;
 	}
 
 	~PhotoBox() {
-		//fprintf( stderr, "delete PhotoBox %s with its image.\n", _file.c_str() );
-		Fl_Image* img;
-		if( ( img = image() ) != NULL ) {
-			delete img;
-		}
 	}
 
-	void resize( int x, int y, int w, int h ) {
-		Fl_Box::resize( x, y, w, h );
-		Fl_Image* img = image();
-		if( img ) {
-			image()->scale( this->w(), this->h(), 1, 1 );
-		}
+	void image( Fl_Image* img ) {
+		_box->image( img );
 	}
+
+	Fl_Image* image() {
+		return _box->image();
+	}
+
 
 	void setSelected( bool selected ) {
 		_isSelected = selected;
@@ -148,56 +215,99 @@ public:
 protected:
 	void draw() {
 		fl_push_clip( x(), y(), w(), h() );
-		Fl_Box::draw();
+		Fl_Group::draw();
 
-		//draw the buttons above picture
-		//first draw a rectangle to write in hence when a
-		//picture is displayed portrait the buttons cannot be seen.
 		int xc = x() + w()/2;
-		//we have 3 buttons (garbage/dunno/good) each of which is 30 px
-		//with a spacing of 4 px between.
 
-		//draw the text below picture: name of photo and time taken.
+		//drawTopBox( xc );
+		drawBottomBox( xc );
+
+		if( _isSelected ) {
+			drawSelectionBorder();
+		}
+		fl_pop_clip();
+	}
+
+	/**
+	 * Draw a box above photo with 3 rectangles in it (garbage/dunno/good).
+	 * @param xc: x coordinate of the center of this box.
+	 */
+	inline void drawTopBox( int xc ) {
+		//each square has a side length of 30 px.
+		//spacing between squares is 4 px.
+		int w = 110;
+
+		int x1 = xc - w/2;
+		//int x2 = xc + w/2;
+		int y1 = y()+1;
+		//int y2 = y1 + h;
+		fl_rectf( x1, y1, w,  _topbox_h, FL_LIGHT2 );
+
+		int spacing_x = 4;
+		w = 25;
+		x1 += 10;
+		y1 += 3;
+
+		Fl_SVG_Image* img = ImageFactory::inst().getPaleRed();
+		img->scale( w, _topbox_h - 7, 1, 1 );
+		img->draw( x1, y1 );
+
+//		fl_rectf( x1, y1, w, h, FL_GREEN );
+//		x1 += w + spacing_x;
+//		fl_rectf( x1, y1, w, h, FL_YELLOW );
+//		x1 += w + spacing_x;
+//		fl_rectf( x1, y1, w, h, FL_RED );
+	}
+
+
+	/**
+	 * Draw a rectangle below photo to write into hence when a
+	 * picture is drawn portrait the text is hardly to see.
+	 * Draw text below picture: name of photo and time taken.
+	 * @param xc: x coordinate of the center of this box.
+	 */
+	inline void drawBottomBox( int xc ) {
 		int xcf = xc - _filename_size.w/2;
 		int xcd = xc - _datetime_size.w/2;
 		int Y = y() + h() - 20;
-		//first draw a rectangle to write in hence when a
-		//picture is drawn portrait the text is hardly to see.
+
 		int X = xcf < xcd ? xcf : xcd;
 		int W = _filename_size.w > _datetime_size.w ? _filename_size.w
-				                                    : _datetime_size.w;
+													: _datetime_size.w;
 		fl_rectf( X, Y-15, W+20 /*dunno why*/, 35, FL_LIGHT2 );
 
-		//draw filename below picture
+		//draw filename
 		fl_color( FL_BLACK );
 		fl_draw( _file.c_str(), xcf, Y );
 
 		//draw datetime below filename
 		Y += 16;
 		fl_draw( _datetime.c_str(), xcd, Y );
-
-		//draw selection border if box is selected
-		if( _isSelected ) {
-			int margin = 2;
-			fl_line_style( FL_SOLID, 3 );
-			fl_color( FL_YELLOW );
-			float x1 = x();
-			float x2 = x() + w() - margin;
-			float y1 = y();
-			float y2 = y() + h() - margin;
-			fl_begin_line();
-			fl_vertex( x1, y1 );
-			fl_vertex( x2, y1 );
-			fl_vertex( x2, y2 );
-			fl_vertex( x1, y2 );
-			fl_vertex( x1, y1 );
-			fl_end_line();
-
-			fl_line_style( 0 );
-		}
-		fl_pop_clip();
 	}
+
+	inline void drawSelectionBorder() {
+		int margin = 2;
+		fl_line_style( FL_SOLID, 3 );
+		fl_color( FL_YELLOW );
+		float x1 = x();
+		float x2 = x() + w() - margin;
+		float y1 = y();
+		float y2 = y() + h() - margin;
+		fl_begin_line();
+		fl_vertex( x1, y1 );
+		fl_vertex( x2, y1 );
+		fl_vertex( x2, y2 );
+		fl_vertex( x1, y2 );
+		fl_vertex( x1, y1 );
+		fl_end_line();
+
+		fl_line_style( 0 );
+	}
+
 private:
+	Fl_Toggle_Button* _btnRed = NULL;
+	Fl_Toggle_Button* _btnYellow = NULL;
+	Fl_Toggle_Button* _btnGreen = NULL;
 	string _folder;
 	string _file;
 	mutable string _pathnfile;
@@ -207,6 +317,9 @@ private:
 	Size _filename_size;
 	Size _datetime_size;
 	bool _isSelected = false;
+	int _topbox_h = 32;
+	Fl_SVG_Image* _svgRed = NULL;
+	Fl_Box* _box = NULL;
 };
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -257,6 +370,10 @@ public:
 			}
 			Fl_Widget* w = Fl::belowmouse();
 			PhotoBox* box = dynamic_cast<PhotoBox*>( w );
+			if( !box ) {
+				Box* innerbox = dynamic_cast<Box*>( w );
+				if( innerbox ) box = (PhotoBox*)innerbox->parent();
+			}
 			if( box ) {
 				box->setSelected( true );
 				if( _click_cb ) {
@@ -613,6 +730,18 @@ public:
 		//todo
 		if( !rightMouse && doubleClick ) {
 			//zoom Image in FlxDialog
+			FlxDialog dlg( 300, _scroll->y(), 800, 800,
+					      box->getPhotoPathnFile().c_str() );
+			FlxRect& rect = dlg.getClientArea();
+			PhotoBox box2( rect.x, rect.y, rect.w, rect.h );
+			Fl_Image* img = box->image();
+			img->scale( rect.w, rect.h, 1, 1 );
+			box2.image( img );
+			dlg.add( box2 );
+			dlg.show( false );
+			box2.image( NULL );
+			img->scale( box->w(), box->h(), 1, 1 );
+			box->redraw();
 		} else if( rightMouse && !doubleClick ) {
 			//show context menu
 		}
@@ -914,34 +1043,23 @@ void checkMemory() {
 	g_physmem_used = physMemUsed;
 }
 
-void showDialog( Fl_Widget*, void* ) {
-	FlxDialog* dlg = new FlxDialog( 400, 400, 500, 500, "Test Dialog");
-	Fl_Group* grp = dlg->createClientAreaGroup( FL_FLAT_BOX, FL_RED );
-	dlg->resizable( grp );
-	int rc = dlg->show( false );
-	fprintf( stderr, "RC: %d\n", rc );
-}
 
 int test() {
-	Fl_Double_Window *win =	new Fl_Double_Window(200, 200, 300, 400, "TEST" );
+	Fl_Double_Window *win =	new Fl_Double_Window(200, 200, 400, 400, "TEST" );
 	win->box( FL_FLAT_BOX );
 	win->color( FL_LIGHT2 );
 	int margin_x = 10;
 	int spacing_x = 5;
 	int margin_y = 10;
-	int btn_w = 70;
-	int btn_h = 25;
-	int btn_x = win->w() - 2*btn_w - spacing_x - margin_x;
-	int btn_y = win->h() - btn_h - margin_y;
-	Fl_Return_Button* btnOk = new Fl_Return_Button( btn_x, btn_y, btn_w, btn_h, "OK" );
-	btnOk->box( FL_THIN_UP_BOX );
-	btnOk->down_box( FL_THIN_DOWN_BOX );
-	btnOk->color( (Fl_Color) 53 );
-	btnOk->down_color( FL_LIGHT1 );
-	btnOk->clear_visible_focus();
-	btnOk->callback( showDialog, NULL );
-	btn_x += btn_w + spacing_x;
-	Fl_Button* btnCancel = new Fl_Button( btn_x, btn_y, btn_w, btn_h, "Cancel" );
+
+	PhotoBox* box = new PhotoBox( margin_x, margin_y,
+								  win->w() - 2*margin_x,
+								  win->h() - 2*margin_y,
+								  "/home/martin/Projects/cpp/Phorg/testphotos", "20200102_092128.jpg" );
+	Fl_Image* img = new Fl_JPEG_Image( "/home/martin/Projects/cpp/Phorg/testphotos/20200102_092128.jpg" );
+	img->scale( box->w(), box->h(), 1, 1 );
+	box->image( img );
+
 	win->end();
 	win->show();
 	return Fl::run();
