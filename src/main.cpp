@@ -20,6 +20,7 @@
 
 #include "../images/open.xpm"
 #include "../images/manage_folders.xpm"
+#include "../images/move_files.xpm"
 
 #include "std.h"
 #include "const.h"
@@ -175,6 +176,7 @@ public:
 
 	}
 
+private:
 	Fl_Toggle_Button* newToggleButton( int x, int y, int w, int h,
 								       Fl_Image* img, Fl_Color down_color )
 	{
@@ -185,9 +187,32 @@ public:
 		img->scale( w, h, 1, 1 );
 		btn->image( img );
 		btn->down_color( down_color );
+		btn->callback( onToggled_static, this );
 		return btn;
 	}
 
+	static void onToggled_static( Fl_Widget* w, void* data ) {
+		PhotoBox* box = (PhotoBox*)data;
+		box->onToggled( (Fl_Toggle_Button*)w );
+	}
+
+	void onToggled( Fl_Toggle_Button* btn ) {
+		bool on = ( btn->value() != 0 );
+		if( on ) {
+			if ( btn == _btnRed ) {
+				setYellowButton( false );
+				setGreenButton( false );
+			} else if ( btn == _btnYellow ) {
+				setRedButton( false );
+				setGreenButton( false );
+			} else if ( btn == _btnGreen ) {
+				setRedButton( false );
+				setYellowButton( false );
+			}
+		}
+	}
+
+public:
 	~PhotoBox() {
 	}
 
@@ -203,6 +228,45 @@ public:
 	void setSelected( bool selected ) {
 		_isSelected = selected;
 		redraw();
+	}
+
+	void setRedButton( bool pressed ) {
+		_btnRed->value( pressed ? 1 : 0 );
+	}
+
+	void setYellowButton( bool pressed ) {
+		_btnYellow->value( pressed ? 1 : 0 );
+	}
+
+	void setGreenButton( bool pressed ) {
+		_btnGreen->value( pressed ? 1 : 0 );
+	}
+
+	Fl_Color getSelectedColor() const {
+		if( _btnRed == NULL ) {
+			fprintf( stderr, "UUUUPS\n" );
+		}
+		int val = _btnRed->value();
+		if( _btnRed->value() != 0 ) return FL_RED;
+		if( _btnYellow->value() != 0 ) return FL_YELLOW;
+		if( _btnGreen->value() != 0 ) return FL_GREEN;
+		return 0;
+	}
+
+	void setSelectedColor( Fl_Color color ) {
+		switch( color ) {
+		case FL_RED:
+			setRedButton( true );
+			break;
+		case FL_YELLOW:
+			setYellowButton( true );
+			break;
+		case FL_GREEN:
+			setGreenButton( true );
+			break;
+		default:
+			break;
+		}
 	}
 
 	const string& getPhotoPathnFile() const {
@@ -445,6 +509,7 @@ static const char* SYMBOL_FIRST = "@|<";
 enum ToolId {
 	OPEN_FOLDER,
 	MANAGE_FOLDERS,
+	MOVE_FILES,
 	RENAME_FILES,
 	LAST_PAGE,
 	NEXT_PAGE,
@@ -702,6 +767,10 @@ public:
 		pThis->renameFiles();
 	}
 
+	static void onMoveFiles_static( Fl_Widget*, void* data ) {
+
+	}
+
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
 		Controller* pThis = (Controller*)data;
 		string label;
@@ -734,6 +803,7 @@ public:
 					      box->getPhotoPathnFile().c_str() );
 			FlxRect& rect = dlg.getClientArea();
 			PhotoBox box2( rect.x, rect.y, rect.w, rect.h );
+			box2.setSelectedColor( box->getSelectedColor() );
 			Fl_Image* img = box->image();
 			img->scale( rect.w, rect.h, 1, 1 );
 			box2.image( img );
@@ -1085,6 +1155,9 @@ int main() {
 	Controller ctrl( scroll, tb );
 	tb->addButton( ToolId::OPEN_FOLDER, open_xpm, "Choose photo folder", Controller::onOpen_static, &ctrl );
 	tb->addButton( ToolId::MANAGE_FOLDERS, manage_folders_xpm, "List, create and delete subfolders", Controller::onManageFolders_static, &ctrl );
+	tb->addButton( ToolId::MOVE_FILES, move_files_xpm, "Move pictures as defined", Controller::onMoveFiles_static, &ctrl );
+
+	//Navigation buttons
 	tb->addButton( ToolId::LAST_PAGE, SYMBOL_LAST, FL_ALIGN_RIGHT, "Browse last page", Controller::onChangePage_static, &ctrl );
 	tb->addButton( ToolId::NEXT_PAGE, SYMBOL_NEXT, FL_ALIGN_RIGHT, "Browse next page", Controller::onChangePage_static, &ctrl );
 	tb->addButton( ToolId::PREVIOUS_PAGE, SYMBOL_PREVIOUS, FL_ALIGN_RIGHT, "Browse previous page", Controller::onChangePage_static, &ctrl );
