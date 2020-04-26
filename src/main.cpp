@@ -768,7 +768,8 @@ public:
 	}
 
 	static void onMoveFiles_static( Fl_Widget*, void* data ) {
-
+		Controller* pThis = (Controller*) data;
+		pThis->moveFiles();
 	}
 
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
@@ -1047,6 +1048,37 @@ private:
 		}
 	}
 
+	/**
+	 * Move currently shown pictures according user's settings.
+	 */
+	void moveFiles() {
+		const char* srcfolder = _folder.c_str();
+		auto itr = _photos.begin() + _photoIndexStart;
+		auto itrmax = itr + _photoIndexEnd;
+		for( ; itr != _photos.end() &&  itr <= itrmax; itr++ ) {
+			PhotoInfo* pinfo = (PhotoInfo*)(*itr);
+			PhotoBox* box = pinfo->box;
+			Fl_Color color = box->getSelectedColor();
+			string destfolder = _folder + "/";
+			switch( color ) {
+			case FL_RED:
+				destfolder.append( GARBAGE_FOLDER );
+				break;
+			case FL_YELLOW:
+				destfolder.append( DUNNO_FOLDER );
+				break;
+			case FL_GREEN:
+				destfolder.append( GOOD_FOLDER );
+				break;
+			default:
+				continue;
+			}
+			_folderManager.moveFile( destfolder.c_str(),
+					                 srcfolder, pinfo->filename.c_str() );
+		}
+
+		readPhotos( _folder.c_str() );
+	}
 private:
 	Scroll* _scroll;
 	ToolBar* _toolbar;
@@ -1058,7 +1090,7 @@ private:
 	int _photosPerRow = 3;
 	int _maxRows = 4;
 
-	std::vector<PhotoInfo*> _photos; //contains all photos of current folder.
+	std::vector<PhotoInfo*> _photos; //contains all photo infos of current folder.
 	int _photoIndexStart = -1;
 	int _photoIndexEnd = -1;
 	long _usedBytes = 0;
