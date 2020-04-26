@@ -166,12 +166,15 @@ public:
 		int x1 = xc - 50;
 		_btnRed = newToggleButton( x1, y + 1, btn_w, btn_h,
 				                   ImageFactory::inst().getPaleRed(), FL_RED );
+		_btnRed->tooltip( "Earmark this photo for disposal (move into garbage folder)." );
 		x1 += btn_w + spacing_x;
 		_btnYellow = newToggleButton( x1, y + 1, btn_w, btn_h,
 				                      ImageFactory::inst().getPaleYellow(), FL_YELLOW );
+		_btnYellow->tooltip( "Earmark this photo for moving it into the dunno folder." );
 		x1 += btn_w + spacing_x;
 		_btnGreen = newToggleButton( x1, y + 1, btn_w, btn_h,
 				                     ImageFactory::inst().getPaleGreen(), FL_GREEN );
+		_btnGreen->tooltip( "Earmark this photo for moving it into the 'good' folder." );
 		end();
 
 	}
@@ -199,16 +202,7 @@ private:
 	void onToggled( Fl_Toggle_Button* btn ) {
 		bool on = ( btn->value() != 0 );
 		if( on ) {
-			if ( btn == _btnRed ) {
-				setYellowButton( false );
-				setGreenButton( false );
-			} else if ( btn == _btnYellow ) {
-				setRedButton( false );
-				setGreenButton( false );
-			} else if ( btn == _btnGreen ) {
-				setRedButton( false );
-				setYellowButton( false );
-			}
+			unsetExcept( btn );
 		}
 	}
 
@@ -243,10 +237,6 @@ public:
 	}
 
 	Fl_Color getSelectedColor() const {
-		if( _btnRed == NULL ) {
-			fprintf( stderr, "UUUUPS\n" );
-		}
-		int val = _btnRed->value();
 		if( _btnRed->value() != 0 ) return FL_RED;
 		if( _btnYellow->value() != 0 ) return FL_YELLOW;
 		if( _btnGreen->value() != 0 ) return FL_GREEN;
@@ -257,15 +247,31 @@ public:
 		switch( color ) {
 		case FL_RED:
 			setRedButton( true );
+			unsetExcept( _btnRed );
 			break;
 		case FL_YELLOW:
 			setYellowButton( true );
+			unsetExcept( _btnYellow );
 			break;
 		case FL_GREEN:
 			setGreenButton( true );
+			unsetExcept( _btnGreen );
 			break;
 		default:
 			break;
+		}
+	}
+
+	void unsetExcept( Fl_Toggle_Button* btn ) {
+		if ( btn == _btnRed ) {
+			setYellowButton( false );
+			setGreenButton( false );
+		} else if ( btn == _btnYellow ) {
+			setRedButton( false );
+			setGreenButton( false );
+		} else if ( btn == _btnGreen ) {
+			setRedButton( false );
+			setYellowButton( false );
 		}
 	}
 
@@ -307,7 +313,7 @@ protected:
 		//int y2 = y1 + h;
 		fl_rectf( x1, y1, w,  _topbox_h, FL_LIGHT2 );
 
-		int spacing_x = 4;
+		//int spacing_x = 4;
 		w = 25;
 		x1 += 10;
 		y1 += 3;
@@ -800,6 +806,7 @@ public:
 		//todo
 		if( !rightMouse && doubleClick ) {
 			//zoom Image in FlxDialog
+			//prepare dialog
 			FlxDialog dlg( 300, _scroll->y(), 800, 800,
 					      box->getPhotoPathnFile().c_str() );
 			FlxRect& rect = dlg.getClientArea();
@@ -809,7 +816,13 @@ public:
 			img->scale( rect.w, rect.h, 1, 1 );
 			box2.image( img );
 			dlg.add( box2 );
-			dlg.show( false );
+
+			//show dialog
+			if( dlg.show( false ) ) {
+				box->setSelectedColor( box2.getSelectedColor() );
+			}
+
+			//unset image and rescale it for displaying it in the main window
 			box2.image( NULL );
 			img->scale( box->w(), box->h(), 1, 1 );
 			box->redraw();
@@ -1052,6 +1065,7 @@ private:
 	 * Move currently shown pictures according user's settings.
 	 */
 	void moveFiles() {
+		int nmoved = 0;
 		const char* srcfolder = _folder.c_str();
 		auto itr = _photos.begin() + _photoIndexStart;
 		auto itrmax = itr + _photoIndexEnd;
@@ -1073,11 +1087,11 @@ private:
 			default:
 				continue;
 			}
+			nmoved++;
 			_folderManager.moveFile( destfolder.c_str(),
 					                 srcfolder, pinfo->filename.c_str() );
 		}
-
-		readPhotos( _folder.c_str() );
+		if( nmoved > 0 ) readPhotos( _folder.c_str() );
 	}
 private:
 	Scroll* _scroll;
@@ -1187,15 +1201,18 @@ int main() {
 	Controller ctrl( scroll, tb );
 	tb->addButton( ToolId::OPEN_FOLDER, open_xpm, "Choose photo folder", Controller::onOpen_static, &ctrl );
 	tb->addButton( ToolId::MANAGE_FOLDERS, manage_folders_xpm, "List, create and delete subfolders", Controller::onManageFolders_static, &ctrl );
-	tb->addButton( ToolId::MOVE_FILES, move_files_xpm, "Move pictures as defined", Controller::onMoveFiles_static, &ctrl );
 
-	//Navigation buttons
+	//Navigation buttons at the right edge of the toolbar
 	tb->addButton( ToolId::LAST_PAGE, SYMBOL_LAST, FL_ALIGN_RIGHT, "Browse last page", Controller::onChangePage_static, &ctrl );
 	tb->addButton( ToolId::NEXT_PAGE, SYMBOL_NEXT, FL_ALIGN_RIGHT, "Browse next page", Controller::onChangePage_static, &ctrl );
 	tb->addButton( ToolId::PREVIOUS_PAGE, SYMBOL_PREVIOUS, FL_ALIGN_RIGHT, "Browse previous page", Controller::onChangePage_static, &ctrl );
 	tb->addButton( ToolId::FIRST_PAGE, SYMBOL_FIRST, FL_ALIGN_RIGHT, "Browse first page", Controller::onChangePage_static, &ctrl );
+	/////////////////////////////
+
 	const char* f = "/home/martin/Projects/cpp/Phorg/images/rename_files.svg";
 	tb->addButton( ToolId::RENAME_FILES, f, "Rename all jpg files in folder", Controller::onRenameFiles_static, &ctrl );
+	tb->addButton( ToolId::MOVE_FILES, move_files_xpm, "Move pictures as earmarked", Controller::onMoveFiles_static, &ctrl );
+
 	tb->fixButtonsOnResize();
 	tb->setAllPageButtonsEnabled( false );
 	tb->setManageFoldersButtonEnabled( false );
