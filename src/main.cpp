@@ -161,15 +161,14 @@ public:
 		}
 
 		box( FL_FLAT_BOX );
-		color( FL_LIGHT1 );
+		color( FL_LIGHT2 );
 
-		_box = new Box( x, y, w, h );
-
-		int xc = this->x() + this->w()/2;
 		int btn_w = 30;
 		int btn_h = 30;
+		_box = new Box( x, y + btn_h, w, h - btn_h );
+
 		int spacing_x = 5;
-		int x1 = xc - 50;
+		int x1 = this->x() + 10;
 		_btnRed = newToggleButton( x1, y + 1, btn_w, btn_h,
 				                   ImageFactory::inst().getPaleRed(), FL_RED );
 		_btnRed->tooltip( "Earmark this photo for disposal (move into garbage folder)." );
@@ -181,6 +180,19 @@ public:
 		_btnGreen = newToggleButton( x1, y + 1, btn_w, btn_h,
 				                     ImageFactory::inst().getPaleGreen(), FL_GREEN );
 		_btnGreen->tooltip( "Earmark this photo for moving it into the 'good' folder." );
+
+		x1 += btn_w + 2*spacing_x;
+		int label_w = 40;
+		int spacing_y = 4;
+		Fl_Box* moveto_lbl = new Fl_Box( x1, y + spacing_y, label_w, 25, "move to: " );
+		moveto_lbl->box( FL_NO_BOX );
+		moveto_lbl->labelsize( 10 );
+
+		x1 += label_w + spacing_x;
+		_moveto = new Fl_Box( x1, y + spacing_y, 150, 25);
+		_moveto->box( FL_FLAT_BOX );
+		_moveto->color( FL_LIGHT1 );
+		_moveto->labelsize( 11 );
 
 		x1 = this->x() + this->w() - btn_w - spacing_x;
 		_btnBurger = new Fl_Button( x1, y + 1, btn_w, btn_h );
@@ -197,60 +209,12 @@ public:
 
 	}
 
-private:
-	Fl_Toggle_Button* newToggleButton( int x, int y, int w, int h,
-								       Fl_Image* img, Fl_Color down_color )
-	{
-		Fl_Toggle_Button* btn = new Fl_Toggle_Button( x, y, w, h );
-		btn->box( FL_FLAT_BOX );
-		btn->color( FL_LIGHT2 );
-		btn->clear_visible_focus();
-		img->scale( w, h, 1, 1 );
-		btn->image( img );
-		btn->down_color( down_color );
-		btn->callback( onToggled_static, this );
-		return btn;
-	}
-
-	static void onToggled_static( Fl_Widget* w, void* data ) {
-		PhotoBox* box = (PhotoBox*)data;
-		box->onToggled( (Fl_Toggle_Button*)w );
-	}
-
-	static void onBurgerMenu_static( Fl_Widget* w, void* data ) {
-			PhotoBox* box = (PhotoBox*)data;
-			box->showContextMenu( (Fl_Button*)w );
-		}
-
-	void onToggled( Fl_Toggle_Button* btn ) {
-		bool on = ( btn->value() != 0 );
-		if( on ) {
-			unsetExcept( btn );
-		}
-	}
-
-	void showContextMenu( Fl_Button* burger ) {
-		vector<string> folders;
-		FolderManager& fm = FolderManager::inst();
-		fm.getFolders( fm.getCurrentFolder().c_str(), folders );
-		Fl_Menu_Item menu[folders.size()+1];
-		for( int i = 0, imax = folders.size(); i < imax; i++ ) {
-			menu[i] = { folders.at(i).c_str() };
-		}
-		menu[folders.size()] = { 0 };
-		const Fl_Menu_Item *m = menu->popup( burger->x() - 100,
-				                             burger->y()+burger->h(),
-											 0, 0, 0 );
-
-//		Fl_Menu_Button* menu = new Fl_Menu_Button(0,0,640,480,"Popup Menu");
-//		menu->type(Fl_Menu_Button::POPUP3);         // pops menu on right click
-//		menu->add("Do thing#1", "^1", 0 /*callback*/, 0);  // ctrl-1 hotkey
-//		menu->add("Do thing#2", "^2", 0, 0);  // ctrl-2 hotkey
-//		menu->add("Quit",       "^q", 0, 0);  // ctrl-q hotkey
-	}
-
-public:
 	~PhotoBox() {
+	}
+
+	Size getPhotoSize() const {
+		Size size = { _box->w(), _box->h() };
+		return size;
 	}
 
 	void image( Fl_Image* img ) {
@@ -269,6 +233,7 @@ public:
 
 	void setRedButton( bool pressed ) {
 		_btnRed->value( pressed ? 1 : 0 );
+		_moveto->label( GARBAGE_FOLDER );
 	}
 
 	void setYellowButton( bool pressed ) {
@@ -287,22 +252,19 @@ public:
 	}
 
 	void setSelectedColor( Fl_Color color ) {
-		switch( color ) {
-		case FL_RED:
-			setRedButton( true );
-			unsetExcept( _btnRed );
-			break;
-		case FL_YELLOW:
-			setYellowButton( true );
-			unsetExcept( _btnYellow );
-			break;
-		case FL_GREEN:
-			setGreenButton( true );
-			unsetExcept( _btnGreen );
-			break;
-		default:
-			break;
-		}
+		syncFolderNameAndColor( color );
+	}
+
+	const char* getMoveToFolder() const  {
+		return _moveto->label();
+	}
+
+	/**
+	 * Writes text into the moveto Fl_Box.
+	 * Doesn't make any synchronizations with ToggleButtons.
+	 */
+	void setMoveToFolder( const char* folder ) {
+		_moveto->copy_label( folder );
 	}
 
 	void unsetExcept( Fl_Toggle_Button* btn ) {
@@ -331,45 +293,12 @@ protected:
 		Fl_Group::draw();
 
 		int xc = x() + w()/2;
-
-		//drawTopBox( xc );
 		drawBottomBox( xc );
 
 		if( _isSelected ) {
 			drawSelectionBorder();
 		}
 		fl_pop_clip();
-	}
-
-	/**
-	 * Draw a box above photo with 3 rectangles in it (garbage/dunno/good).
-	 * @param xc: x coordinate of the center of this box.
-	 */
-	inline void drawTopBox( int xc ) {
-		//each square has a side length of 30 px.
-		//spacing between squares is 4 px.
-		int w = 110;
-
-		int x1 = xc - w/2;
-		//int x2 = xc + w/2;
-		int y1 = y()+1;
-		//int y2 = y1 + h;
-		fl_rectf( x1, y1, w,  _topbox_h, FL_LIGHT2 );
-
-		//int spacing_x = 4;
-		w = 25;
-		x1 += 10;
-		y1 += 3;
-
-		Fl_SVG_Image* img = ImageFactory::inst().getPaleRed();
-		img->scale( w, _topbox_h - 7, 1, 1 );
-		img->draw( x1, y1 );
-
-//		fl_rectf( x1, y1, w, h, FL_GREEN );
-//		x1 += w + spacing_x;
-//		fl_rectf( x1, y1, w, h, FL_YELLOW );
-//		x1 += w + spacing_x;
-//		fl_rectf( x1, y1, w, h, FL_RED );
 	}
 
 
@@ -418,9 +347,131 @@ protected:
 	}
 
 private:
+	Fl_Toggle_Button* newToggleButton( int x, int y, int w, int h,
+								       Fl_Image* img, Fl_Color down_color )
+	{
+		Fl_Toggle_Button* btn = new Fl_Toggle_Button( x, y, w, h );
+		btn->box( FL_FLAT_BOX );
+		btn->color( FL_LIGHT2 );
+		btn->clear_visible_focus();
+		img->scale( w, h, 1, 1 );
+		btn->image( img );
+		btn->down_color( down_color );
+		btn->callback( onToggled_static, this );
+		return btn;
+	}
+
+	static void onToggled_static( Fl_Widget* w, void* data ) {
+		PhotoBox* box = (PhotoBox*)data;
+		box->onToggled( (Fl_Toggle_Button*)w );
+	}
+
+	static void onBurgerMenu_static( Fl_Widget* w, void* data ) {
+			PhotoBox* box = (PhotoBox*)data;
+			box->showContextMenu( (Fl_Button*)w );
+		}
+
+	void onToggled( Fl_Toggle_Button* btn ) {
+		bool on = ( btn->value() != 0 );
+		if( on ) {
+			unsetExcept( btn );
+			syncFolderNameAndToggleButton( btn );
+		} else {
+			_moveto->label( "" );
+		}
+	}
+
+	void showContextMenu( Fl_Button* burger ) {
+		vector<string> folders;
+		FolderManager& fm = FolderManager::inst();
+		//fm.getFolders( fm.getCurrentFolder().c_str(), folders );
+		fm.getFolders( "/home/martin/Projects/cpp/Phorg/testphotos", folders );
+		Fl_Menu_Item menu[folders.size()+1];
+		for( int i = 0, imax = folders.size(); i < imax; i++ ) {
+			menu[i] = { folders.at(i).c_str() };
+		}
+		menu[folders.size()] = { 0 };
+
+		//get length of longest menu item
+		int len = getWidestLen( folders, _box->labelfont(), _box->labelsize() );
+		const Fl_Menu_Item *m = menu->popup( burger->x() - len,
+				                             burger->y()+burger->h(),
+											 0, 0, 0 );
+		if( m ) {
+			//write folder name into moveto box
+			_tmp_moveto.clear();
+			_tmp_moveto.append( m->text );
+			syncFolderNameAndToggleButton( _tmp_moveto.c_str() );
+		}
+	}
+
+	int getWidestLen( const vector<string>& items, Fl_Font font, Fl_Fontsize fontsize ) {
+		TextMeasure& tm = TextMeasure::inst();
+		int len = 0;
+		for( auto item : items ) {
+			Size sz = tm.get_size( item.c_str(), font, fontsize );
+			len = sz.w > len ? sz.w : len;
+		}
+		return len;
+	}
+
+    void syncFolderNameAndToggleButton( const char* foldernameToSet ) {
+    	setRedButton( false );
+    	setYellowButton( false );
+    	setGreenButton( false );
+    	_moveto->label( foldernameToSet );
+    	if( !strcmp( GARBAGE_FOLDER, foldernameToSet ) ) {
+    		setRedButton( true );
+    	} else if( !strcmp( DUNNO_FOLDER, foldernameToSet ) ) {
+    		setYellowButton( true );
+    	} else if( !strcmp( GOOD_FOLDER, foldernameToSet ) ) {
+    		setGreenButton( true );
+    	}
+    }
+
+    void syncFolderNameAndToggleButton( const Fl_Toggle_Button* btnSelected ) {
+		if( btnSelected == _btnRed ) {
+			_moveto->label( GARBAGE_FOLDER );
+		} else if( btnSelected == _btnYellow ) {
+			_moveto->label( DUNNO_FOLDER );
+		} else if( btnSelected == _btnGreen ) {
+			_moveto->label( GOOD_FOLDER );
+		}
+	}
+
+    void syncFolderNameAndColor( Fl_Color colorToSet ) {
+    	string moveto;
+		switch( colorToSet ) {
+		case FL_RED:
+			setRedButton( true );
+			unsetExcept( _btnRed );
+			moveto = GARBAGE_FOLDER;
+			break;
+		case FL_YELLOW:
+			setYellowButton( true );
+			unsetExcept( _btnYellow );
+			moveto = DUNNO_FOLDER;
+			break;
+		case FL_GREEN:
+			setGreenButton( true );
+			unsetExcept( _btnGreen );
+			moveto = GOOD_FOLDER;
+			break;
+		default:
+			setRedButton( false );
+			setYellowButton( false );
+			setGreenButton( false );
+			break;
+		}
+		_moveto->copy_label( moveto.c_str() );
+	}
+
+private:
 	Fl_Toggle_Button* _btnRed = NULL;
 	Fl_Toggle_Button* _btnYellow = NULL;
 	Fl_Toggle_Button* _btnGreen = NULL;
+	Fl_Box* _moveto = NULL;
+	mutable string _tmp_moveto;
 	Fl_Button* _btnBurger = NULL;
 	string _folder;
 	string _file;
@@ -824,6 +875,7 @@ public:
 
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
 		Controller* pThis = (Controller*)data;
+		if( !pThis->checkEarmarks() ) return;
 		string label;
 		label.append( btn->label() );
 		if( label == SYMBOL_NEXT ) {
@@ -855,15 +907,25 @@ public:
 					      box->getPhotoPathnFile().c_str() );
 			FlxRect& rect = dlg.getClientArea();
 			PhotoBox box2( rect.x, rect.y, rect.w, rect.h );
-			box2.setSelectedColor( box->getSelectedColor() );
+			Fl_Color color = box->getSelectedColor();
+			if( color ) {
+				box2.setSelectedColor( box->getSelectedColor() );
+			} else {
+				const char* moveto = box->getMoveToFolder();
+				if( moveto ) {
+					box2.setMoveToFolder( moveto );
+				}
+			}
 			Fl_Image* img = box->image();
-			img->scale( rect.w, rect.h, 1, 1 );
+			Size sz = box2.getPhotoSize();
+			img->scale( sz.w, sz.h, 1, 1 );
 			box2.image( img );
 			dlg.add( box2 );
 
 			//show dialog
 			if( dlg.show( false ) ) {
 				box->setSelectedColor( box2.getSelectedColor() );
+				box->setMoveToFolder( box2.getMoveToFolder() );
 			}
 
 			//unset image and rescale it for displaying it in the main window
@@ -1061,7 +1123,9 @@ private:
 
 	void loadPhoto( PhotoBox* box ) {
 		Fl_JPEG_Image* jpg = new Fl_JPEG_Image( box->getPhotoPathnFile().c_str() );
-		jpg->scale( _box_w, _box_h, 1, 1 );
+		Size sz = box->getPhotoSize();
+		jpg->scale( sz.w, sz.h, 1, 1 );
+//		jpg->scale( _box_w, _box_h, 1, 1 );
 		_usedBytes += getPhotoSize( jpg );
 		box->image( jpg );
 	}
@@ -1084,6 +1148,33 @@ private:
 
 	void browseFirstPage() {
 		layoutPhotos( Page::FIRST );
+	}
+
+	bool checkEarmarks() {
+		auto itr = _photos.begin() + _photoIndexStart;
+		auto itr2 = _photos.begin() + _photoIndexEnd;
+		for( ; itr <= itr2 && itr != _photos.end(); itr++ ) {
+			PhotoInfo* pinfo = (PhotoInfo*)(*itr);
+			if( pinfo->box->getSelectedColor() != 0 ||
+				pinfo->box->getMoveToFolder() != NULL )
+			{
+				int rc = fl_choice( "There are earmarked photos on this page.\n"
+						            "Do you want them to be moved to the specified folder(s) "
+						            "before paging or discard the earmarks?",
+									"     Cancel     ", "   Move photos   ", "Discard earmarks" );
+				if( rc == 0 ) { //Cancel
+					return false;
+				} else {
+					if( rc == 1 ) {
+						moveFiles();
+					}
+					return true;
+				}
+
+			}
+		}
+		//no earmarks
+		return true;
 	}
 
 	void deletePhotoInfos() {
@@ -1129,7 +1220,12 @@ private:
 				destfolder.append( GOOD_FOLDER );
 				break;
 			default:
-				continue;
+				const char* dest = box->getMoveToFolder();
+				if( !dest ) {
+					continue;
+				} else {
+					destfolder.append( dest );
+				}
 			}
 			nmoved++;
 			_folderManager.moveFile( destfolder.c_str(),
@@ -1140,8 +1236,8 @@ private:
 private:
 	Scroll* _scroll;
 	ToolBar* _toolbar;
-	int _box_w = 400;
-	int _box_h = 400;
+	int _box_w = 420;
+	int _box_h = 420;
 	int _spacing_x = 10;
 	int _spacing_y = 5;
 
@@ -1209,7 +1305,7 @@ int test() {
 	win->box( FL_FLAT_BOX );
 	win->color( FL_LIGHT2 );
 	int margin_x = 10;
-	int spacing_x = 5;
+	//int spacing_x = 5;
 	int margin_y = 10;
 
 	PhotoBox* box = new PhotoBox( margin_x, margin_y,
