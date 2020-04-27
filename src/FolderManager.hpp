@@ -33,14 +33,22 @@ struct ImageInfo {
 };
 
 class FolderManager {
-public:
+private:
 	FolderManager() {
 		_fileChooser.title( "Choose folder with photos to show" );
 		_fileChooser.type( Fl_Native_File_Chooser::BROWSE_DIRECTORY );
 	}
-
+public:
 	~FolderManager() {
 		clearImages();
+	}
+
+	static FolderManager& inst() {
+		static FolderManager* pThis = NULL;
+		if( !pThis ) {
+			pThis = new FolderManager();
+		}
+		return *pThis;
 	}
 
 	const char* chooseFolder() {
@@ -63,6 +71,10 @@ public:
 		}
 
 		return NULL;
+	}
+
+	const string& getCurrentFolder() const {
+		return _folder;
 	}
 
 	/**

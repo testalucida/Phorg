@@ -13,6 +13,7 @@
 #include <FL/Fl_Native_File_Chooser.H>
 #include <FL/Fl_SVG_Image.H>
 #include <FL/fl_ask.H>
+#include <FL/Fl_Menu_Item.H>
 #include <fltk_ext/Canvas.h>
 #include <fltk_ext/DragBox.h>
 #include <fltk_ext/TextMeasure.h>
@@ -113,6 +114,9 @@ public:
 	Fl_SVG_Image* getPaleGreen() const {
 		return _svg_pale_green;
 	}
+	Fl_SVG_Image* getBurger() const {
+		return _svg_burger;
+	}
 private:
 	ImageFactory() {
 		_svg_red = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/red.svg" );
@@ -121,6 +125,7 @@ private:
 		_svg_pale_red = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/pale_red.svg" );
 		_svg_pale_yellow = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/pale_yellow.svg" );
 		_svg_pale_green = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/pale_green.svg" );
+		_svg_burger = new Fl_SVG_Image( "/home/martin/Projects/cpp/Phorg/images/burger.svg" );
 	}
 
 private:
@@ -130,6 +135,7 @@ private:
 	Fl_SVG_Image* _svg_pale_red = NULL;
 	Fl_SVG_Image* _svg_pale_yellow = NULL;
 	Fl_SVG_Image* _svg_pale_green = NULL;
+	Fl_SVG_Image* _svg_burger = NULL;
 };
 
 
@@ -175,6 +181,18 @@ public:
 		_btnGreen = newToggleButton( x1, y + 1, btn_w, btn_h,
 				                     ImageFactory::inst().getPaleGreen(), FL_GREEN );
 		_btnGreen->tooltip( "Earmark this photo for moving it into the 'good' folder." );
+
+		x1 = this->x() + this->w() - btn_w - spacing_x;
+		_btnBurger = new Fl_Button( x1, y + 1, btn_w, btn_h );
+		_btnBurger->box( FL_FLAT_BOX );
+		_btnBurger->color( FL_LIGHT2 );
+		_btnBurger->clear_visible_focus();
+		Fl_SVG_Image* img = ImageFactory::inst().getBurger();
+		img->scale( btn_w, btn_h );
+		_btnBurger->image( img );
+		_btnBurger->tooltip( "Choose folder by menu to move this photo into." );
+		_btnBurger->callback( onBurgerMenu_static, this );
+
 		end();
 
 	}
@@ -199,11 +217,36 @@ private:
 		box->onToggled( (Fl_Toggle_Button*)w );
 	}
 
+	static void onBurgerMenu_static( Fl_Widget* w, void* data ) {
+			PhotoBox* box = (PhotoBox*)data;
+			box->showContextMenu( (Fl_Button*)w );
+		}
+
 	void onToggled( Fl_Toggle_Button* btn ) {
 		bool on = ( btn->value() != 0 );
 		if( on ) {
 			unsetExcept( btn );
 		}
+	}
+
+	void showContextMenu( Fl_Button* burger ) {
+		vector<string> folders;
+		FolderManager& fm = FolderManager::inst();
+		fm.getFolders( fm.getCurrentFolder().c_str(), folders );
+		Fl_Menu_Item menu[folders.size()+1];
+		for( int i = 0, imax = folders.size(); i < imax; i++ ) {
+			menu[i] = { folders.at(i).c_str() };
+		}
+		menu[folders.size()] = { 0 };
+		const Fl_Menu_Item *m = menu->popup( burger->x() - 100,
+				                             burger->y()+burger->h(),
+											 0, 0, 0 );
+
+//		Fl_Menu_Button* menu = new Fl_Menu_Button(0,0,640,480,"Popup Menu");
+//		menu->type(Fl_Menu_Button::POPUP3);         // pops menu on right click
+//		menu->add("Do thing#1", "^1", 0 /*callback*/, 0);  // ctrl-1 hotkey
+//		menu->add("Do thing#2", "^2", 0, 0);  // ctrl-2 hotkey
+//		menu->add("Quit",       "^q", 0, 0);  // ctrl-q hotkey
 	}
 
 public:
@@ -378,6 +421,7 @@ private:
 	Fl_Toggle_Button* _btnRed = NULL;
 	Fl_Toggle_Button* _btnYellow = NULL;
 	Fl_Toggle_Button* _btnGreen = NULL;
+	Fl_Button* _btnBurger = NULL;
 	string _folder;
 	string _file;
 	mutable string _pathnfile;
@@ -1108,7 +1152,7 @@ private:
 	int _photoIndexStart = -1;
 	int _photoIndexEnd = -1;
 	long _usedBytes = 0;
-	FolderManager _folderManager;
+	FolderManager& _folderManager = FolderManager::inst();
 	string _folder; //current folder whose photos are displayed
 };
 //*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
