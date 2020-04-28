@@ -192,6 +192,8 @@ public:
 		}
 	}
 
+	/** Checks if the passed folder exists.
+	 * The complete (absolute) path must be given. */
 	bool existsFolder( const char* folder ) const {
 		struct stat buffer;
 		return ( stat( folder, &buffer) == 0 );

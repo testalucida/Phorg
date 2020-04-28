@@ -142,6 +142,7 @@ public:
 		while( shown() ) {
 			Fl::wait();
 		}
+		Fl::remove_timeout( resetStatus_static, this );
 		return 1; //_ok ? 1 : 0;
 	}
 

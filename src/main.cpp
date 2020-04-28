@@ -1208,22 +1208,59 @@ private:
 	void moveFiles() {
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 		int nmoved = 0;
+		bool redfolderchecked = false;
+		bool yellowfolderchecked = false;
+		bool greenfolderchecked = false;
+		bool checkerror = false;
 		const char* srcfolder = _folder.c_str();
 		auto itr = _photos.begin() + _photoIndexStart;
 		auto itrmax = itr + _photoIndexEnd;
-		for( ; itr != _photos.end() &&  itr <= itrmax; itr++ ) {
+		for( ; itr != _photos.end() &&  itr <= itrmax && !checkerror; itr++ ) {
 			PhotoInfo* pinfo = (PhotoInfo*)(*itr);
 			PhotoBox* box = pinfo->box;
 			Fl_Color color = box->getSelectedColor();
 			string destfolder = _folder + "/";
 			switch( color ) {
 			case FL_RED:
+				if( !redfolderchecked ) {
+					if( !_folderManager.existsFolder(
+							(_folder + "/" + GARBAGE_FOLDER ).c_str() ) )
+					{
+						fl_alert( "Garbage folder doesn't exist.\n"
+								  "Create it using Toolbutton 'List and create subfolders'" );
+						checkerror = true;
+						break;
+					}
+					redfolderchecked = true;
+				}
 				destfolder.append( GARBAGE_FOLDER );
 				break;
 			case FL_YELLOW:
+				if( !yellowfolderchecked ) {
+					if( !_folderManager.existsFolder(
+							(_folder + "/" + DUNNO_FOLDER ).c_str() ) )
+					{
+						fl_alert( "Dunno folder doesn't exist.\n"
+								  "Create it using Toolbutton 'List and create subfolders'" );
+						checkerror = true;
+						break;
+					}
+					yellowfolderchecked = true;
+				}
 				destfolder.append( DUNNO_FOLDER );
 				break;
 			case FL_GREEN:
+				if( !greenfolderchecked ) {
+					if( !_folderManager.existsFolder(
+							(_folder + "/" + GOOD_FOLDER ).c_str() ) )
+					{
+						fl_alert( "Good folder doesn't exist.\n"
+								  "Create it using Toolbutton 'List and create subfolders'" );
+						checkerror = true;
+						break;
+					}
+					greenfolderchecked = true;
+				}
 				destfolder.append( GOOD_FOLDER );
 				break;
 			default:
@@ -1234,11 +1271,14 @@ private:
 					destfolder.append( dest );
 				}
 			}
-			nmoved++;
-			_folderManager.moveFile( destfolder.c_str(),
-					                 srcfolder, pinfo->filename.c_str() );
+			if( !checkerror ) {
+				nmoved++;
+				_folderManager.moveFile( destfolder.c_str(),
+										 srcfolder, pinfo->filename.c_str() );
+			}
 		}
-		if( nmoved > 0 ) readPhotos( _folder.c_str() );
+
+		if( !checkerror && nmoved > 0 ) readPhotos( _folder.c_str() );
 
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
