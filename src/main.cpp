@@ -611,6 +611,7 @@ enum ToolId {
 	OPEN_FOLDER,
 	MANAGE_FOLDERS,
 	MOVE_FILES,
+	MOVE_FILES_BACK,
 	RENAME_FILES,
 	LAST_PAGE,
 	NEXT_PAGE,
@@ -860,17 +861,30 @@ public:
 
 	static void onManageFolders_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
-		pThis->showFolderDialog();
+		if( !pThis->getCurrentFolder().empty() ) {
+			pThis->showFolderDialog();
+		} else {
+			//todo: status "no photo folder selected."
+		}
 	}
 
 	static void onRenameFiles_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
-		pThis->renameFiles();
+		if( !pThis->getCurrentFolder().empty() ) {
+			pThis->renameFiles();
+		} else {
+			//todo: status "no photo folder selected."
+		}
 	}
 
 	static void onMoveFiles_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
 		pThis->moveFiles();
+	}
+
+	static void onMoveFilesBack_static( Fl_Widget*, void* data ) {
+		Controller* pThis = (Controller*) data;
+
 	}
 
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
@@ -959,6 +973,10 @@ public:
 			_folder.append( folder );
 		}
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
+	}
+
+	const string& getCurrentFolder() const {
+		return _folder;
 	}
 
 	void renameFiles() {
@@ -1400,12 +1418,15 @@ int main() {
 
 	const char* f = "/home/martin/Projects/cpp/Phorg/images/rename_files.svg";
 	tb->addButton( ToolId::RENAME_FILES, f, "Rename all jpg files in folder", Controller::onRenameFiles_static, &ctrl );
-	tb->addButton( ToolId::MOVE_FILES, move_files_xpm, "Move earmarked pictures into specified folders", Controller::onMoveFiles_static, &ctrl );
+	const char* move = "/home/martin/Projects/cpp/Phorg/images/move.svg";
+	tb->addButton( ToolId::MOVE_FILES, move, "Move earmarked pictures into specified folders", Controller::onMoveFiles_static, &ctrl );
+	const char* move_back = "/home/martin/Projects/cpp/Phorg/images/move_back.svg";
+	tb->addButton( ToolId::MOVE_FILES_BACK, move_back, "Move pictures from subfolders into parent folder", Controller::onMoveFilesBack_static, &ctrl );
 
 	tb->fixButtonsOnResize();
 	tb->setAllPageButtonsEnabled( false );
-	tb->setManageFoldersButtonEnabled( false );
-	tb->setRenameFilesButtonEnabled( false );
+	//tb->setManageFoldersButtonEnabled( false );
+	//tb->setRenameFilesButtonEnabled( false );
 	win->resizable( scroll );
 	win->end();
 	win->show();
