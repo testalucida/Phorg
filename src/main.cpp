@@ -875,6 +875,8 @@ public:
 
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
 		Controller* pThis = (Controller*)data;
+		((Fl_Double_Window*)pThis->_scroll->parent())->cursor( FL_CURSOR_WAIT );
+		Fl::check(); //give FLTK a little time to change cursor
 		if( !pThis->checkEarmarks() ) return;
 		string label;
 		label.append( btn->label() );
@@ -887,6 +889,7 @@ public:
 		} else {
 			pThis->browseFirstPage();
 		}
+		((Fl_Double_Window*)pThis->_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
 
 	static void onPhotoBoxClicked_static( PhotoBox* box,
@@ -938,6 +941,7 @@ public:
 	}
 
 	void openFolder() {
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 		const char* folder = _folderManager.chooseFolder();
 		if( folder ) {
 			string title = "Photo Organization";
@@ -954,6 +958,7 @@ public:
 			_folder.clear();
 			_folder.append( folder );
 		}
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
 
 	void renameFiles() {
@@ -961,8 +966,10 @@ public:
 				              "Resulting filenames will be of format\nYYYYMMDD_TTTTTT.jpg",
 							  "No", "Yes", NULL );
 		if( resp == 1 ) {
+			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 			_folderManager.renameFilesToDatetime( _folder.c_str() );
 			readPhotos( _folder.c_str() );
+			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 		}
 	}
 
@@ -973,7 +980,6 @@ public:
 			addImageFile( img->folder.c_str(), img->filename.c_str(), img->datetime.c_str() );
 		}
 
-		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 		layoutPhotos( Page::FIRST );
 	}
 
@@ -1200,6 +1206,7 @@ private:
 	 * Move currently shown pictures according user's settings.
 	 */
 	void moveFiles() {
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 		int nmoved = 0;
 		const char* srcfolder = _folder.c_str();
 		auto itr = _photos.begin() + _photoIndexStart;
@@ -1232,6 +1239,8 @@ private:
 					                 srcfolder, pinfo->filename.c_str() );
 		}
 		if( nmoved > 0 ) readPhotos( _folder.c_str() );
+
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
 private:
 	Scroll* _scroll;
@@ -1331,10 +1340,10 @@ int main() {
 	checkMemory();
 	// additional linker options: -lfltk_images -ljpeg -lpng
 	fl_register_images();
-	int w = 1250;
-	int h = 470;
+	int w = 1330;
+	int h = 780;
 	Fl_Double_Window *win =
-			new Fl_Double_Window(200, 200, w, h, "Photo Organization" );
+			new Fl_Double_Window(150, 0, w, h, "Photo Organization" );
 
 	ToolBar* tb = new ToolBar( 0, 0, w );
 	Scroll* scroll = new Scroll( 0, tb->h(), w, win->h() - tb->h() );
@@ -1351,7 +1360,7 @@ int main() {
 
 	const char* f = "/home/martin/Projects/cpp/Phorg/images/rename_files.svg";
 	tb->addButton( ToolId::RENAME_FILES, f, "Rename all jpg files in folder", Controller::onRenameFiles_static, &ctrl );
-	tb->addButton( ToolId::MOVE_FILES, move_files_xpm, "Move pictures as earmarked", Controller::onMoveFiles_static, &ctrl );
+	tb->addButton( ToolId::MOVE_FILES, move_files_xpm, "Move earmarked pictures into specified folders", Controller::onMoveFiles_static, &ctrl );
 
 	tb->fixButtonsOnResize();
 	tb->setAllPageButtonsEnabled( false );
