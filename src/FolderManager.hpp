@@ -78,12 +78,12 @@ public:
 	}
 
 	/**
-	 * Gets all jpg, jpeg JPG and JPEG files in the given folder.
+	 * Gets all jpg, jpeg, JPG and JPEG files in the given folder.
 	 * No png files.
-	 * Renames files in a kind that the time taken forms the file name.
 	 * Rotate jpeg if wanted and necessary and sort them if wanted
 	 * ascending or descending according to  Date/Time info in the EXIF block.
-	 * This is done by using jhead.
+	 * This is based on the jpg informations extracted by jhead (which reads
+	 * the EXIF block of each photo).
 	 * Note:
 	 * By each call of this method all PathnFile elements
 	 * of the previously returned vector  will be deleted.
@@ -268,9 +268,104 @@ private:
 		provideImageInfos( result );
 	}
 
+//	void provideImageInfos( string& result ) {
+//		const string filenameLabel = "File name";
+//
+//		size_t pos1 = result.find( filenameLabel, 0 );
+//		while( pos1 != string::npos ) {
+//			size_t posSlash = result.find( "/", pos1 + 1 );
+//			size_t posEOL;
+//			if( posSlash != string::npos ) {
+//				posEOL = result.find( "\n", posSlash + 1 );
+//				if( posEOL != string::npos ) {
+//					ImageInfo* ii = new ImageInfo;
+//					int len = posEOL - posSlash;
+//					string pathnfile( result, posSlash, len );
+//					splitPathnfile( pathnfile, ii->folder, ii->filename );
+//					getDateTimeInfo( result, ii->datetime, posEOL + 1 );
+//					fprintf( stderr, "ii filename and datetime: %s -- %s\n",
+//							ii->filename.c_str(), ii->datetime.c_str() );
+//					_images.push_back( ii );
+//				} else {
+//					throw runtime_error( "FolderManager::provideImageInfos(): "
+//										 "Can't find end of line" );
+//				}
+//			} else {
+//				throw runtime_error( "FolderManager::provideImageInfos(): "
+//									 "Can't find start of path" );
+//			}
+//			pos1 = result.find( filenameLabel, posEOL + 1 );
+//		} // while
+//	}
+
+
+	void provideImageInfos( string& result ) {
+		string pathnfile;
+		size_t eolAfterFile = -1;
+		while( ( eolAfterFile =
+				 getPathnFile( result, pathnfile, eolAfterFile+1 ) ) != string::npos )
+		{
+			ImageInfo* ii = new ImageInfo;
+			splitPathnfile( pathnfile, ii->folder, ii->filename );
+			getDateTimeInfo( result, ii->datetime, eolAfterFile + 1 );
+			fprintf( stderr, "ii filename and datetime: %s -- %s\n",
+					ii->filename.c_str(), ii->datetime.c_str() );
+			_images.push_back( ii );
+		}
+	}
+
+	/**
+	 * Searches for folder and file name within the given result
+	 * starting from argument start.
+	 * Provides argument pathnfile with the found path and file (if any)
+	 * and returns the position of line end after file name.
+	 */
+	size_t getPathnFile( const string& result, string& pathnfile, size_t start ) {
+		size_t posEOL = string::npos;
+		size_t pos1 = result.find( "File name", start );
+		if( pos1 != string::npos ) {
+			size_t posSlash = result.find( "/", pos1 + 1 );
+			if( posSlash != string::npos ) {
+				posEOL = result.find( "\n", posSlash + 1 );
+				if( posEOL != string::npos ) {
+					int len = posEOL - posSlash;
+					pathnfile = result.substr( posSlash, len );
+				} else {
+					throw runtime_error( "FolderManager::getFilename(): "
+										 "Can't find end of line" );
+				}
+			} else {
+				throw runtime_error( "FolderManager::getFilename(): "
+									 "Can't find start of path" );
+			}
+		}
+		return posEOL;
+	}
+
+	void splitPathnfile( const string& pathnfile, string& path, string& file ) {
+		size_t pos = pathnfile.rfind( "/" );
+		path = pathnfile.substr( 0, pos );
+		int len = pathnfile.size() - pos - 1;
+		file = pathnfile.substr( pos+1, len );
+	}
+
+	/** tries to extract date time infos out of the EXIF block.
+	 * @param result: an unknown number of EXIF blocks to search in
+	 * @param datetime: argument to provide with the date time info.
+	 *                  If no date time info is found, "unknown" will be provided.
+	 * @param start: position within exif where to start searching
+	 */
 	void getDateTimeInfo( const string& result, string& datetime, size_t start ) {
 		const string datetime_const = "Date/Time";
 		size_t pos1 = result.find( datetime_const, start );
+		//check if we have found pos1 within the interesting EXIF block:
+		string dummy;
+		size_t check = getPathnFile( result, dummy, start );
+		if( pos1 > check ) {
+			//found Date/Time in one of the next EXIF blocks
+			datetime = "unknown";
+			return;
+		}
 		if( pos1 != string::npos ) {
 			size_t posX = result.find( ":", pos1 ) + 2;
 			if( posX != string::npos ) {
@@ -287,45 +382,8 @@ private:
 									 "Can't find colon" );
 			}
 		} else {
-//			throw runtime_error( "FolderManager::getDateTimeInfo(): "
-//								 "Can't find Date/Time string" );
 			datetime = "unknown";
 		}
-	}
-
-	void splitPathnfile( const string& pathnfile, string& path, string& file ) {
-		size_t pos = pathnfile.rfind( "/" );
-		path = pathnfile.substr( 0, pos );
-		int len = pathnfile.size() - pos - 1;
-		file = pathnfile.substr( pos+1, len );
-	}
-
-	void provideImageInfos( string& result ) {
-		const string filename = "File name";
-
-		size_t pos1 = result.find( filename, 0 );
-		while( pos1 != string::npos ) {
-			size_t posSlash = result.find( "/", pos1 + 1 );
-			size_t posEOL;
-			if( posSlash != string::npos ) {
-				posEOL = result.find( "\n", posSlash + 1 );
-				if( posEOL != string::npos ) {
-					ImageInfo* ii = new ImageInfo;
-					int len = posEOL - posSlash;
-					string pathnfile( result, posSlash, len );
-					splitPathnfile( pathnfile, ii->folder, ii->filename );
-					getDateTimeInfo( result, ii->datetime, posEOL + 1 );
-					_images.push_back( ii );
-				} else {
-					throw runtime_error( "FolderManager::provideImageInfos(): "
-										 "Can't find end of line" );
-				}
-			} else {
-				throw runtime_error( "FolderManager::provideImageInfos(): "
-									 "Can't find start of path" );
-			}
-			pos1 = result.find( filename, posEOL + 1 );
-		} // while
 	}
 
 	void renameFile( const string& folder, string& filename, const string& datetime ) {

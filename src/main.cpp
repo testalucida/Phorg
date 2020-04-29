@@ -18,6 +18,7 @@
 #include <fltk_ext/DragBox.h>
 #include <fltk_ext/TextMeasure.h>
 #include <fltk_ext/FlxDialog.h>
+#include <fltk_ext/FlxButton.h>
 
 #include "../images/open.xpm"
 #include "../images/manage_folders.xpm"
@@ -35,11 +36,26 @@
 
 using namespace std;
 
+class TestImage : public Fl_JPEG_Image {
+public:
+	TestImage( const char* file ) : Fl_JPEG_Image( file ) {
+	}
+
+	void draw( int x, int y ) {
+		fprintf( stderr, "TestImage::draw(): x = %d, y = %d\n", x, y );
+		Fl_JPEG_Image::draw( x,y );
+	}
+
+};
+
 class Box: public Fl_Box {
 public:
-	Box( int x, int y, int w, int h ) : Fl_Box( x, y, w, h ) {
+	Box( int x, int y, int w, int h ) :
+		Fl_Box( x, y, w, h ), _img_x( x ), _img_y( y )
+	{
 		box( FL_FLAT_BOX );
 		color( FL_LIGHT2 );
+		//fprintf( stderr, "constructor: img_x, img_y: %d, %d\n", _img_x, _img_y );
 	}
 
 	~Box() {
@@ -49,39 +65,110 @@ public:
 		}
 	}
 
-//	int handle( int evt ) {
-//		int rc = Fl_Box::handle( evt );
-//		//const char* evtname = fl_eventnames[evt];
-//		//fprintf( stderr, "evt: %d -- %s\n", evt, evtname );
-//		switch( evt ) {
-//		case FL_MOUSEWHEEL: { //FL_MOUSEWHEEL - 19
-//			if( Fl::belowmouse() == this ) {
-//				fprintf( stderr, "dx: %d, dy: %d\n", Fl::event_dx(), Fl::event_dy() );
-//				_zoom += ( 0.2 * Fl::event_dy() );
-//				_zoom = ( _zoom < 0.2 ) ? 0.2 : _zoom;
-//				int W = round( (float)w() * _zoom );
-//				int H = round( (float)h() * _zoom );
-//				image()->scale( W, H, 1, 1 );
-//				resize( x(), y(), image()->w(), image()->h() );
-//				parent()->redraw();
-//			}
-//			return 1;
-//		}
-//		default:
-//			return rc;
+	int handle( int evt ) {
+		static int dx = 0;
+		static int dy = 0;
+		static int wheel = 0;
+		int rc = Fl_Box::handle( evt );
+		//const char* evtname = fl_eventnames[evt];
+		//fprintf( stderr, "evt: %d -- %s\n", evt, evtname );
+		switch( evt ) {
+		case FL_PUSH:
+			dx = Fl::event_x();
+			dy = Fl::event_y();
+			if( _zoom > 1.0 )  {
+				this->top_window()->cursor( FL_CURSOR_MOVE );
+				Fl::check();
+//				float zoomfactor = _zoom - 1;
+//				_img_x = _img_x - round( ( (float)_img_x * zoomfactor ) );
+//				_img_y = _img_y - round( ( (float)_img_y * zoomfactor ) );
+			}
+			return 1;
+		case FL_RELEASE:
+			fl_cursor( FL_CURSOR_DEFAULT );
+			dx = Fl::event_x();
+			dy = Fl::event_y();
+			return 1;
+		case FL_DRAG: {
+			if( _zoom > 1.0 ) {
+				dx -= Fl::event_x(); //gt 0: dragged to the left
+				dy -= Fl::event_y(); //gt 0: dragged to the top
+				_img_x -= dx;
+				_img_y -= dy;
+				Fl_Image* img = this->image();
+				///////////// WORK IN PROGRESS  ///////////////////////
+				//img->draw( _img_x, _img_y );
+				int offx = x() - _img_x;
+				int offy = y() - _img_y;
+				img->draw( x(), y(), w(), h(), offx, offy );
+				//////////////////////////////////////////////////////////////////
+//				fprintf( stderr, "dx = %d, dy = %d -- drew image at %d, %d\n",
+//						 dx, dy, _img_x, _img_y );
+				dx = Fl::event_x();
+				dy = Fl::event_y();
+
+			}
+			return 1;
+		}
+		case FL_MOUSEWHEEL: { //FL_MOUSEWHEEL - 19
+			if( Fl::belowmouse() == this && Fl::event_key( FL_Control_L ) ) {
+				Fl_Image* img = image();
+				_zoom += ( 0.2 * Fl::event_dy() );
+				_zoom = ( _zoom < 0.2 ) ? 0.2 : _zoom;
+				int oldw = img->w();
+				int oldh = img->h();
+				if( wheel == 0 ) { //first Mousewheel event
+					//adjust _img_y:
+					int dh = h() - oldh;
+					_img_y += dh/2;
+
+					//adjust _img_x:
+					int dw = w() - oldw;
+					_img_x += dw/2;
+					wheel = 1;
+				}
+				int W = round( (float)w() * _zoom );
+				int H = round( (float)h() * _zoom );
+				img->scale( W, H, 1, 1 );
+				int neww = img->w();
+				int newh = img->h();
+				int dw = oldw - neww;
+				int dh = oldh - newh;
+				_img_x += dw/2;
+				_img_y += dh/2;
+//				fprintf( stderr, "oldw, oldh: %d, %d, neww, newh: %d, %d, img_x, img_y: %d, %d\n",
+//						         oldw, oldh, neww, newh, _img_x, _img_y );
+				//resize( x(), y(), image()->w(), image()->h() );
+				parent()->redraw();
+				return 1;
+			}
+			return rc;
+		}
+		default:
+			return rc;
+		}
+	}
+
+
+//	void resize( int x, int y, int w, int h ) {
+//		Fl_Box::resize( x, y, w, h );
+//		Fl_Image* img = image();
+//		if( img ) {
+//			image()->scale( this->w(), this->h(), 1, 1 );
 //		}
 //	}
 
-	void resize( int x, int y, int w, int h ) {
-		Fl_Box::resize( x, y, w, h );
-		Fl_Image* img = image();
-		if( img ) {
-			image()->scale( this->w(), this->h(), 1, 1 );
-		}
+protected:
+	void draw() {
+		fl_push_clip( x(), y(), w(), h() );
+		Fl_Box::draw();
+		fl_pop_clip();
 	}
 
 private:
 	float _zoom = 1;
+	int _img_x;
+	int _img_y;
 
 }; //class Box
 
@@ -287,6 +374,10 @@ public:
 		return _pathnfile;
 	}
 
+	Box* getBox() const {
+		return _box;
+	}
+
 protected:
 	void draw() {
 		fl_push_clip( x(), y(), w(), h() );
@@ -484,7 +575,7 @@ private:
 	bool _isSelected = false;
 	int _topbox_h = 32;
 	Fl_SVG_Image* _svgRed = NULL;
-	Fl_Box* _box = NULL;
+	Box* _box = NULL;
 };
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -1366,9 +1457,49 @@ void checkMemory() {
 	g_physmem_used = physMemUsed;
 }
 
+static void drawImage( Fl_Widget* w, void* data ) {
+	static int x = 0;
+	static int y = 0;
+	static float zoom = 1.0;
+	int n = 10;
+	PhotoBox* box = (PhotoBox*)data;
+	Fl_Image* img = box->image();
+	FlxButton* btn = (FlxButton*) w;
+
+	switch( btn->getId() ) {
+	case 1: //xp
+		x += n;
+		break;
+	case 2: //xm
+		x -= n;
+		break;
+	case 3: //yp
+		y += n;
+		break;
+	case 4: //ym
+		y -= n;
+		break;
+	case 5: //zoom in
+		zoom += 0.2;
+		img->scale( box->getBox()->w() * zoom, box->getBox()->h() * zoom, 1, 1 );
+		break;
+	case 6: //zoom out
+		zoom -= 0.2;
+		img->scale( box->getBox()->w() * zoom, box->getBox()->h() * zoom, 1, 1 );
+		break;
+	default:
+		break;
+	}
+
+	img->draw( x, y );
+	box->getBox()->redraw();
+	box->redraw();
+//	box->parent()->redraw();
+	fprintf( stderr, "drawImage: x = %d, y = %d\n", x, y );
+}
 
 int test() {
-	Fl_Double_Window *win =	new Fl_Double_Window(200, 200, 400, 400, "TEST" );
+	Fl_Double_Window *win =	new Fl_Double_Window(200, 200, 400, 420, "TEST" );
 	win->box( FL_FLAT_BOX );
 	win->color( FL_LIGHT2 );
 	int margin_x = 10;
@@ -1377,11 +1508,34 @@ int test() {
 
 	PhotoBox* box = new PhotoBox( margin_x, margin_y,
 								  win->w() - 2*margin_x,
-								  win->h() - 2*margin_y,
+								  win->h() - 4*margin_y,
 								  "/home/martin/Projects/cpp/Phorg/testphotos", "20200102_092128.jpg" );
-	Fl_Image* img = new Fl_JPEG_Image( "/home/martin/Projects/cpp/Phorg/testphotos/20200102_092128.jpg" );
+	TestImage* img = new TestImage( "/home/martin/Projects/cpp/Phorg/testphotos/20200102_092128.jpg" );
 	img->scale( box->w(), box->h(), 1, 1 );
 	box->image( img );
+
+	int y = box->y() + box->h() + 3;
+
+	FlxButton* xp = new FlxButton( margin_x, y, 25, 25, "x+" );
+	xp->setId( 1 );
+	xp->callback( drawImage, box );
+	FlxButton* xm = new FlxButton( xp->x() + xp->w(), y, 25, 25, "x-" );
+	xm->setId( 2 );
+	xm->callback( drawImage, box );
+
+	FlxButton* yp = new FlxButton( xm->x() + xm->w() + 3, xm->y(), 25, 25, "y+" );
+	yp->setId( 3 );
+	yp->callback( drawImage, box );
+	FlxButton* ym = new FlxButton( yp->x() + yp->w(), xm->y(), 25, 25, "y-" );
+	ym->setId( 4 );
+	ym->callback( drawImage, box );
+
+	FlxButton* zi = new FlxButton( ym->x() + ym->w() + 10, ym->y(), 25, 25, "+" );
+	zi->setId( 5 );
+	zi->callback( drawImage, box );
+	FlxButton* zo = new FlxButton( zi->x() + zi->w(), ym->y(), 25, 25, "-" );
+	zo->setId( 6 );
+	zo->callback( drawImage, box );
 
 	win->end();
 	win->show();
@@ -1440,3 +1594,16 @@ int main() {
 	fprintf( stderr, "Delta physmem_used: %lld \n", g_physmem_used - physmem_used );
 	return rc;
 }
+
+/**
+ * todo
+ *  - place moveto label centered (PhotoBox)
+ *  - write log on renamings
+ *  - FlxStatusBox in toolbar
+ *  - show number of photos to load and loading progress in status box
+ *  - zooming in dialog
+ *  - compare 2 photos in dialog (via context menu)
+ *  - delete photo phsysical (via context menu)
+ *  - rotate photo (via context menu)
+ *  - application icon
+ */
