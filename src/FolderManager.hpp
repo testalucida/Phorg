@@ -153,6 +153,15 @@ public:
 			string msg = "Error on moving file from " + current + " to " + dest;
 			throw runtime_error( "FolderManager::moveFile(): " + msg );
 		}
+
+		//todo: change ImageInfo in _images
+		//current = srcfolder;
+		for( auto ii : _images ) {
+			if( ii->filename == filename && ii->folder == srcfolder ) {
+				ii->folder = destfolder;
+				return;
+			}
+		}
 	}
 
 	static void onCreateFolders( bool garbage, bool good, bool dunno, const char* other, void* data ) {
@@ -199,6 +208,30 @@ public:
 		return ( stat( folder, &buffer) == 0 );
 	}
 
+	/** Deletes the passed file from disc.*/
+	void deleteFile( const char* pathnfile ) {
+		if( remove ( pathnfile ) != 0 ) {
+			perror( "FolderManager::deleteFile(): error deleting file." );
+			string msg = "FolderManager::deleteFile(): error deleting file ";
+			msg.append( pathnfile );
+			throw runtime_error( msg );
+		}
+
+		// erase corresponding ImageInfo from vector _images
+		string pafi = pathnfile;
+		string path;
+		string filename;
+		splitPathnfile( pafi, path, filename );
+		for( auto itr = _images.begin(); itr != _images.end(); itr++ ) {
+			ImageInfo* ii = *itr;
+			if( ii->folder == path && ii->filename == filename ) {
+				_images.erase( itr );
+				delete ii;
+				return;
+			}
+		}
+	}
+
 	void createFolder( const char* name ) const {
 		int temp = umask( 0 );
 		string folder = _folder;
@@ -242,7 +275,9 @@ private:
 		command.append( "/*.*" );
 		int rc = system( command.c_str() );
 		if( rc != 0 ) {
-			throw runtime_error( "FolderManager::rotate(): Rotation failed." );
+			//we may not throw here because jhead gives an error 'no such file' if
+			//folder is empty.
+			//throw runtime_error( "FolderManager::rotateImages(): Rotation failed." );
 		}
 	}
 

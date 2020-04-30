@@ -270,18 +270,28 @@ public:
 				                     ImageFactory::inst().getPaleGreen(), FL_GREEN );
 		_btnGreen->tooltip( "Earmark this photo for moving it into the 'good' folder." );
 
-		x1 += btn_w + 2*spacing_x;
-		int label_w = 40;
+		//A centered group between the 3 color buttons and the burger button.
+		//Containing label "move to: " and a box
+		//containing the name of the folder the photo is to move to.
+		int label_w = 40; //width of "move to: " label
+		int box_w = 150; //width of the box with folder name
+		int xc = this->x() + this->w()/2;
+		int grpx = xc - (label_w + spacing_x + box_w)/2 + 2*spacing_x;
+		int grpw = label_w + box_w + 3*spacing_x;
 		int spacing_y = 4;
-		Fl_Box* moveto_lbl = new Fl_Box( x1, y + spacing_y, label_w, 25, "move to: " );
+		Fl_Group* moveto_grp = new Fl_Group( grpx, y + spacing_y, grpw, 25 );
+
+		//the label box
+		Fl_Box* moveto_lbl = new Fl_Box( grpx, y + spacing_y, label_w, 25, "move to: " );
 		moveto_lbl->box( FL_NO_BOX );
 		moveto_lbl->labelsize( 10 );
-
-		x1 += label_w + spacing_x;
-		_moveto = new Fl_Box( x1, y + spacing_y, 150, 25);
+		//the folder name box
+		int boxx = grpx + label_w + spacing_x;
+		_moveto = new Fl_Box( boxx, y + spacing_y, box_w, 25);
 		_moveto->box( FL_FLAT_BOX );
 		_moveto->color( FL_LIGHT1 );
 		_moveto->labelsize( 11 );
+		moveto_grp->end();
 
 		x1 = this->x() + this->w() - btn_w - spacing_x;
 		_btnBurger = new Fl_Button( x1, y + 1, btn_w, btn_h );
@@ -318,6 +328,10 @@ public:
 	void setSelected( bool selected ) {
 		_isSelected = selected;
 		redraw();
+	}
+
+	bool isSelected() const {
+		return _isSelected;
 	}
 
 	void setRedButton( bool pressed ) {
@@ -379,6 +393,14 @@ public:
 	Box* getBox() const {
 		return _box;
 	}
+
+//	int handle( int e ) {
+//		if( e == FL_PUSH && Fl::event_button3() ) {
+//			fprintf( stderr, "PhotoBox::handle( FL_PUSH )\n" );
+//			return 1;
+//		}
+//		return Fl_Group::handle( e );
+//	}
 
 protected:
 	void draw() {
@@ -460,9 +482,9 @@ private:
 	}
 
 	static void onBurgerMenu_static( Fl_Widget* w, void* data ) {
-			PhotoBox* box = (PhotoBox*)data;
-			box->showContextMenu( (Fl_Button*)w );
-		}
+		PhotoBox* box = (PhotoBox*)data;
+		box->showBurgerMenu( (Fl_Button*)w );
+	}
 
 	void onToggled( Fl_Toggle_Button* btn ) {
 		bool on = ( btn->value() != 0 );
@@ -474,7 +496,7 @@ private:
 		}
 	}
 
-	void showContextMenu( Fl_Button* burger ) {
+	void showBurgerMenu( Fl_Button* burger ) {
 		vector<string> folders;
 		FolderManager& fm = FolderManager::inst();
 		//fm.getFolders( fm.getCurrentFolder().c_str(), folders );
@@ -623,7 +645,8 @@ public:
 		switch( evt ) {
 		case FL_PUSH: {
 			bool shift_pressed = Fl::event_key(FL_Shift_L);
-			if( !shift_pressed ) {
+			bool right_mouse = ( Fl::event_button3() != 0 );
+			if( !shift_pressed && !right_mouse ) {
 				unselectAll();
 			}
 			Fl_Widget* w = Fl::belowmouse();
@@ -636,7 +659,7 @@ public:
 				box->setSelected( true );
 				if( _click_cb ) {
 					(_click_cb)( box,
-							     (Fl::event_button2() != 0),
+							     right_mouse,
 							     (Fl::event_clicks() != 0),
 								 _click_cb_data );
 				}
@@ -679,6 +702,15 @@ public:
 			PhotoBox* box = dynamic_cast<PhotoBox*>( child( i ) );
 			if( box ) {
 				box->setSelected( false );
+			}
+		}
+	}
+
+	void getSelectedPhotos( vector<PhotoBox*>& selectedBoxes ) const {
+		for( int i = 0, imax = children(); i < imax; i++ ) {
+			PhotoBox* box = dynamic_cast<PhotoBox*>( child( i ) );
+			if( box && box->isSelected() ) {
+				selectedBoxes.push_back( box );
 			}
 		}
 	}
@@ -972,7 +1004,8 @@ public:
 		if( !pThis->getCurrentFolder().empty() ) {
 			pThis->showFolderDialog();
 		} else {
-			//todo: status "no photo folder selected."
+			g_statusbox->setStatusText( "You need to open a folder "
+					                    "before you may create subfolders.");
 		}
 	}
 
@@ -981,7 +1014,7 @@ public:
 		if( !pThis->getCurrentFolder().empty() ) {
 			pThis->renameFiles();
 		} else {
-			//todo: status "no photo folder selected."
+			g_statusbox->setStatusText( "Nothing to rename. No folder opened.", 2 );
 		}
 	}
 
@@ -1025,7 +1058,6 @@ public:
 	}
 
 	void onPhotoBoxClicked( PhotoBox* box, bool rightMouse, bool doubleClick ) {
-		//todo
 		if( !rightMouse && doubleClick ) {
 			//zoom Image in FlxDialog
 			//prepare dialog
@@ -1060,6 +1092,7 @@ public:
 			box->redraw();
 		} else if( rightMouse && !doubleClick ) {
 			//show context menu
+			showPhotoContextMenu( box );
 		}
 	}
 
@@ -1104,23 +1137,33 @@ public:
 		}
 	}
 
-	void readPhotos( const char* folder ) {
-		reset();
-		vector<ImageInfo*>& imagefiles = _folderManager.getImages( folder );
-		for( auto img : imagefiles ) {
-			addImageFile( img->folder.c_str(), img->filename.c_str(), img->datetime.c_str() );
+private:
+
+	void showPhotoContextMenu( PhotoBox* box ) {
+		int nEntries = 1;
+		vector<PhotoBox*> selectedBoxes;
+		_scroll->getSelectedPhotos( selectedBoxes );
+		if( selectedBoxes.size() > 1 ) {
+			nEntries = 2;
 		}
-
-		layoutPhotos( Page::FIRST );
-	}
-
-	void reset() {
-		removePhotosFromCanvas();
-		//_photos.clear();
-		deletePhotoInfos();
-		_usedBytes = 0;
-		_photoIndexStart = -1;
-		_photoIndexEnd = -1;
+		Fl_Menu_Item menu[nEntries + 1];
+		const char* DELETE = "Delete from disc";
+		const char* COMPARE = "Compare selected photos...";
+		menu[0] = { DELETE };
+		if( nEntries == 2 ) {
+			menu[1] = { COMPARE };
+		}
+		menu[nEntries == 1 ? 1 : 2] = { 0 };
+		const Fl_Menu_Item *m = menu->popup( Fl::event_x(), Fl::event_y(),
+											 0, 0, 0 );
+		if( m ) {
+			if( !strcmp( m->text, DELETE ) ) {
+				for( auto box : selectedBoxes ) {
+					_folderManager.deleteFile( box->getPhotoPathnFile().c_str() );
+				}
+				readPhotos( _folder.c_str() );
+			}
+		}
 	}
 
 	void addImageFile( const char* folder, const char* filename, const char* datetime ) {
@@ -1220,18 +1263,6 @@ public:
 
 	}
 
-	inline void validateEndIndex() {
-		if( _photoIndexEnd >= (int)_photos.size() ) {
-			_photoIndexEnd = _photos.size() - 1;
-		}
-	}
-
-	inline void validateStartIndex() {
-		_photoIndexStart = _photoIndexStart < 0 ? 0 : _photoIndexStart;
-	}
-
-private:
-
 	void showFolderDialog() {
 		FolderDialog* dlg = new FolderDialog( 100, 100, _folder.c_str() );
 		dlg->setCreateFolderCallback( FolderManager::onCreateFolders,
@@ -1256,6 +1287,35 @@ private:
 
 		dlg->show( true );
 		delete dlg;
+	}
+
+	void readPhotos( const char* folder ) {
+		reset();
+		vector<ImageInfo*>& imagefiles = _folderManager.getImages( folder );
+		for( auto img : imagefiles ) {
+			addImageFile( img->folder.c_str(), img->filename.c_str(), img->datetime.c_str() );
+		}
+
+		layoutPhotos( Page::FIRST );
+	}
+
+	void reset() {
+		removePhotosFromCanvas();
+		//_photos.clear();
+		deletePhotoInfos();
+		_usedBytes = 0;
+		_photoIndexStart = -1;
+		_photoIndexEnd = -1;
+	}
+
+	inline void validateEndIndex() {
+		if( _photoIndexEnd >= (int)_photos.size() ) {
+			_photoIndexEnd = _photos.size() - 1;
+		}
+	}
+
+	inline void validateStartIndex() {
+		_photoIndexStart = _photoIndexStart < 0 ? 0 : _photoIndexStart;
 	}
 
 	void loadPhoto( PhotoBox* box ) {
@@ -1337,7 +1397,12 @@ private:
 	 * Move currently shown pictures according user's choices.
 	 */
 	void moveFiles() {
-		g_statusbox->setStatusText( "Moving files...", 2 );
+		if( _folder.empty() ) {
+			g_statusbox->setStatusText( "Nothing to move. No folder opened.", 2 );
+			return;
+		} else {
+			g_statusbox->setStatusText( "Moving files...", 2 );
+		}
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 		int nmoved = 0;
 		bool redfolderchecked = false;
@@ -1623,11 +1688,9 @@ int main() {
 
 /**
  * todo
- *  - place moveto label centered (PhotoBox)
  *  - write log on renamings
  *  - show number of photos to load and loading progress in status box
  *  - compare 2 photos in dialog (via context menu)
- *  - delete photo phsysical (via context menu)
  *  - rotate photo (via context menu)
  *  - application icon
  */
