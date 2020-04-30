@@ -23,7 +23,7 @@
 
 #include "../images/open.xpm"
 #include "../images/manage_folders.xpm"
-#include "../images/move_files.xpm"
+//#include "../images/move_files.xpm"
 
 #include "std.h"
 #include "const.h"
@@ -1158,6 +1158,12 @@ private:
 											 0, 0, 0 );
 		if( m ) {
 			if( !strcmp( m->text, DELETE ) ) {
+				int rc = fl_choice( "Really delete the selected photo(s)?",
+						            "  No  ", "Yes", NULL );
+				if( rc == 0 ) {
+					return;
+				}
+
 				for( auto box : selectedBoxes ) {
 					_folderManager.deleteFile( box->getPhotoPathnFile().c_str() );
 				}
