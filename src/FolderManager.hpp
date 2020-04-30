@@ -268,37 +268,6 @@ private:
 		provideImageInfos( result );
 	}
 
-//	void provideImageInfos( string& result ) {
-//		const string filenameLabel = "File name";
-//
-//		size_t pos1 = result.find( filenameLabel, 0 );
-//		while( pos1 != string::npos ) {
-//			size_t posSlash = result.find( "/", pos1 + 1 );
-//			size_t posEOL;
-//			if( posSlash != string::npos ) {
-//				posEOL = result.find( "\n", posSlash + 1 );
-//				if( posEOL != string::npos ) {
-//					ImageInfo* ii = new ImageInfo;
-//					int len = posEOL - posSlash;
-//					string pathnfile( result, posSlash, len );
-//					splitPathnfile( pathnfile, ii->folder, ii->filename );
-//					getDateTimeInfo( result, ii->datetime, posEOL + 1 );
-//					fprintf( stderr, "ii filename and datetime: %s -- %s\n",
-//							ii->filename.c_str(), ii->datetime.c_str() );
-//					_images.push_back( ii );
-//				} else {
-//					throw runtime_error( "FolderManager::provideImageInfos(): "
-//										 "Can't find end of line" );
-//				}
-//			} else {
-//				throw runtime_error( "FolderManager::provideImageInfos(): "
-//									 "Can't find start of path" );
-//			}
-//			pos1 = result.find( filenameLabel, posEOL + 1 );
-//		} // while
-//	}
-
-
 	void provideImageInfos( string& result ) {
 		string pathnfile;
 		size_t eolAfterFile = -1;
@@ -308,8 +277,8 @@ private:
 			ImageInfo* ii = new ImageInfo;
 			splitPathnfile( pathnfile, ii->folder, ii->filename );
 			getDateTimeInfo( result, ii->datetime, eolAfterFile + 1 );
-			fprintf( stderr, "ii filename and datetime: %s -- %s\n",
-					ii->filename.c_str(), ii->datetime.c_str() );
+//			fprintf( stderr, "ii filename and datetime: %s -- %s\n",
+//					ii->filename.c_str(), ii->datetime.c_str() );
 			_images.push_back( ii );
 		}
 	}

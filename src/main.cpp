@@ -19,6 +19,7 @@
 #include <fltk_ext/TextMeasure.h>
 #include <fltk_ext/FlxDialog.h>
 #include <fltk_ext/FlxButton.h>
+#include <fltk_ext/FlxStatusBox.h>
 
 #include "../images/open.xpm"
 #include "../images/manage_folders.xpm"
@@ -26,6 +27,7 @@
 
 #include "std.h"
 #include "const.h"
+#include "global.h"
 #include "FolderManager.hpp"
 #include "FolderDialog.hpp"
 
@@ -838,17 +840,31 @@ public:
 	 * resizing when the application window is resized.
 	 * Call this method after having added all toolbar buttons.
 	 */
-	void fixButtonsOnResize() {
-		if( _filler == NULL )  {
-			int X = x() + w()/2;
-			_filler = new Fl_Box( X, y(), 1, 1 );
-			_filler->box( FL_FLAT_BOX );
-			//_filler->color( FL_RED );
-			add( _filler );
-			resizable( _filler );
-		} else {
+//	void fixButtonsOnResize() {
+//		if( _filler == NULL )  {
+//			int X = x() + w()/2;
+//			_filler = new Fl_Box( X, y(), 1, 1 );
+//			_filler->box( FL_FLAT_BOX );
+//			_filler->color( FL_RED );
+//			add( _filler );
+//			resizable( _filler );
+//		} else {
+//
+//		}
+//	}
 
+	FlxStatusBox* addStatusBox() {
+		if( _statusbox == NULL ) {
+			Position left = getXYfromLeft();
+			Position right = getXYfromRight();
+			int x = left.x + 10;
+			int w = right.x - x;
+			_statusbox = new FlxStatusBox( x, y() + 2, w, h()-4 );
+			add( _statusbox );
+			resizable( _statusbox );
+			g_statusbox = _statusbox;
 		}
+		return _statusbox;
 	}
 
 	const Tool& getTool( ToolId id ) {
@@ -901,6 +917,7 @@ private:
 	Fl_Button* _mostRightLeftButton = NULL;
 	Fl_Button* _mostLeftRightButton = NULL;
 	Fl_Box* _filler = NULL;
+	FlxStatusBox* _statusbox = NULL;
 	int _spacing_x = 4;
 	int _buttonsize = 32;
 	vector<Tool*> _tools;
@@ -979,6 +996,7 @@ public:
 	}
 
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
+		g_statusbox->setStatusText( "Changing page...", 2 );
 		Controller* pThis = (Controller*)data;
 		((Fl_Double_Window*)pThis->_scroll->parent())->cursor( FL_CURSOR_WAIT );
 		Fl::check(); //give FLTK a little time to change cursor
@@ -1054,6 +1072,9 @@ public:
 			title.append( folder );
 			((Fl_Double_Window*)_scroll->parent())->label( title.c_str() );
 
+			g_statusbox->setStatusTextV( "sss", "Reading photos from ", folder,
+					                    ". This may take a while..." );
+
 			/*get photos from selected dictionary*/
 			readPhotos( folder );
 
@@ -1075,6 +1096,7 @@ public:
 				              "Resulting filenames will be of format\nYYYYMMDD_TTTTTT.jpg",
 							  "No", "Yes", NULL );
 		if( resp == 1 ) {
+			g_statusbox->setStatusText( "Renaming photos will take a while..." );
 			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 			_folderManager.renameFilesToDatetime( _folder.c_str() );
 			readPhotos( _folder.c_str() );
@@ -1312,9 +1334,10 @@ private:
 	}
 
 	/**
-	 * Move currently shown pictures according user's settings.
+	 * Move currently shown pictures according user's choices.
 	 */
 	void moveFiles() {
+		g_statusbox->setStatusText( "Moving files...", 2 );
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 		int nmoved = 0;
 		bool redfolderchecked = false;
@@ -1577,7 +1600,10 @@ int main() {
 	const char* move_back = "/home/martin/Projects/cpp/Phorg/images/move_back.svg";
 	tb->addButton( ToolId::MOVE_FILES_BACK, move_back, "Move pictures from subfolders into parent folder", Controller::onMoveFilesBack_static, &ctrl );
 
-	tb->fixButtonsOnResize();
+	//tb->fixButtonsOnResize();
+	FlxStatusBox* status = tb->addStatusBox();
+	status->setStatusText( "Ready to rumble!" );
+
 	tb->setAllPageButtonsEnabled( false );
 	//tb->setManageFoldersButtonEnabled( false );
 	//tb->setRenameFilesButtonEnabled( false );
@@ -1599,9 +1625,7 @@ int main() {
  * todo
  *  - place moveto label centered (PhotoBox)
  *  - write log on renamings
- *  - FlxStatusBox in toolbar
  *  - show number of photos to load and loading progress in status box
- *  - zooming in dialog
  *  - compare 2 photos in dialog (via context menu)
  *  - delete photo phsysical (via context menu)
  *  - rotate photo (via context menu)
