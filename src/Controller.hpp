@@ -173,23 +173,22 @@ public:
 
 private:
 
-	void showPhotoContextMenu( vector<PhotoBox*>& selectedBoxes /*PhotoBox* box*/ ) {
-		int nEntries = 2;
-//		vector<PhotoBox*> selectedBoxes;
-//		_scroll->getSelectedPhotos( selectedBoxes );
-		if( selectedBoxes.size() > 1 ) {
-			nEntries = 3;
-		}
-		Fl_Menu_Item menu[nEntries + 1];
+	void showPhotoContextMenu( vector<PhotoBox*>& selectedBoxes ) {
+		Fl_Menu_Item menu[6];
 		const char* GIMP = "Open with GIMP...";
 		const char* DELETE = "Delete from disc";
 		const char* COMPARE = "Compare selected photos...";
-		menu[0] = { GIMP };
-		menu[1] = { DELETE };
-		if( nEntries == 3 ) {
-			menu[2] = { COMPARE };
+		const char* ROTATE_CLOCK = "Rotate clockwise";
+		const char* ROTATE_ANTICLOCK = "Rotate anti-clockwise";
+		menu[0] = { GIMP, 0, NULL, NULL, FL_MENU_DIVIDER };
+		menu[1] = { DELETE, 0, NULL, NULL, FL_MENU_DIVIDER };
+		menu[2] = { ROTATE_CLOCK };
+		menu[3] = { ROTATE_ANTICLOCK, 0, NULL, NULL, FL_MENU_DIVIDER };
+		menu[4] = { COMPARE };
+		if( selectedBoxes.size() != 2 ) {
+			menu[4].deactivate();
 		}
-		menu[nEntries == 2 ? 2 : 3] = { 0 };
+		menu[5] = { 0 };
 		const Fl_Menu_Item *m = menu->popup( Fl::event_x(), Fl::event_y(),
 											 0, 0, 0 );
 		if( m ) {
@@ -198,14 +197,16 @@ private:
 			} else if( !strcmp( m->text, DELETE ) ) {
 				int rc = fl_choice( "Really delete the selected photo(s)?",
 						            "  No  ", "Yes", NULL );
-				if( rc == 0 ) {
-					return;
+				if( rc == 1 ) {
+					for( auto box : selectedBoxes ) {
+						_folderManager.deleteFile( box->getPhotoPathnFile().c_str() );
+					}
+					readPhotos( _folder.c_str() );
 				}
-
-				for( auto box : selectedBoxes ) {
-					_folderManager.deleteFile( box->getPhotoPathnFile().c_str() );
-				}
-				readPhotos( _folder.c_str() );
+			} else if( !strcmp( m->text, ROTATE_CLOCK ) ) {
+				rotate( selectedBoxes, 90 );
+			} else if( !strcmp( m->text, ROTATE_ANTICLOCK ) ) {
+				rotate( selectedBoxes, -90 );
 			} else {
 				//open enlargement dialog
 				int n = selectedBoxes.size();
@@ -225,6 +226,29 @@ private:
 		_gimp_handle = popen( command.c_str(), "r");
 		if( !_gimp_handle ) {
 			g_statusbox->setStatusText( "Failed opening GIMP." );
+		}
+	}
+
+	void rotate( const vector<PhotoBox*>& boxes, int degrees ) {
+		for( auto box : boxes ) {
+			string command = "convert ";
+			command.append( box->getPhotoPathnFile() );
+			command.append( " -rotate " );
+			command.append( to_string( degrees ) );
+			command.append( " " );
+			command.append( box->getPhotoPathnFile() );
+			if( system( command.c_str() ) != 0 ) {
+				g_statusbox->setStatusTextV( "ss", "Failed rotating ",
+						                     box->getPhotoPathnFile().c_str() );
+			} else {
+				//reload rotated image
+				Fl_Image* img = box->getBox()->image();
+				delete img;
+				box->getBox()->image( NULL );
+				loadPhoto( box );
+				box->redraw();
+				g_statusbox->setStatusTextV( "ss", box->getFile().c_str(), " rotated." );
+			}
 		}
 	}
 
@@ -448,7 +472,6 @@ private:
 		Fl_JPEG_Image* jpg = new Fl_JPEG_Image( box->getPhotoPathnFile().c_str() );
 		Size sz = box->getPhotoSize();
 		jpg->scale( sz.w, sz.h, 1, 1 );
-//		jpg->scale( _box_w, _box_h, 1, 1 );
 		_usedBytes += getPhotoSize( jpg );
 		box->image( jpg );
 	}

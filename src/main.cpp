@@ -217,8 +217,8 @@ int main() {
 
 /**
  * todo
+ *  - move files back
  *  - write log on renamings
  *  - show number of photos to load and loading progress in status box
- *  - rotate photo (via context menu)
  *  - application icon
  */
