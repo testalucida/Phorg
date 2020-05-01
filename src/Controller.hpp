@@ -118,41 +118,15 @@ public:
 	}
 
 	void onPhotoBoxClicked( PhotoBox* box, bool rightMouse, bool doubleClick ) {
+		vector<PhotoBox*> selectedBoxes;
+		_scroll->getSelectedPhotos( selectedBoxes );
+
 		if( !rightMouse && doubleClick ) {
 			//zoom Image in FlxDialog
-			//1st: prepare dialog
-			FlxDialog dlg( 300, _scroll->y(), 800, 800,
-					      box->getPhotoPathnFile().c_str() );
-			FlxRect& rect = dlg.getClientArea();
-			PhotoBox box2( rect.x, rect.y, rect.w, rect.h );
-			Fl_Color color = box->getSelectedColor();
-			if( color ) {
-				box2.setSelectedColor( box->getSelectedColor() );
-			} else {
-				const char* moveto = box->getMoveToFolder();
-				if( moveto ) {
-					box2.setMoveToFolder( moveto );
-				}
-			}
-			Fl_Image* img = box->image();
-			Size sz = box2.getPhotoSize();
-			img->scale( sz.w, sz.h, 1, 1 );
-			box2.image( img );
-			dlg.add( box2 );
-
-			//2nd: show dialog
-			if( dlg.show( false ) ) {
-				box->setSelectedColor( box2.getSelectedColor() );
-				box->setMoveToFolder( box2.getMoveToFolder() );
-			}
-
-			//3rd: unset image and rescale it for displaying it in the main window
-			box2.image( NULL );
-			img->scale( box->w(), box->h(), 1, 1 );
-			box->redraw();
+			showEnlargementDialog( selectedBoxes.at(0) );
 		} else if( rightMouse && !doubleClick ) {
 			//show context menu
-			showPhotoContextMenu( box );
+			showPhotoContextMenu( selectedBoxes );
 		}
 	}
 
@@ -199,25 +173,29 @@ public:
 
 private:
 
-	void showPhotoContextMenu( PhotoBox* box ) {
-		int nEntries = 1;
-		vector<PhotoBox*> selectedBoxes;
-		_scroll->getSelectedPhotos( selectedBoxes );
+	void showPhotoContextMenu( vector<PhotoBox*>& selectedBoxes /*PhotoBox* box*/ ) {
+		int nEntries = 2;
+//		vector<PhotoBox*> selectedBoxes;
+//		_scroll->getSelectedPhotos( selectedBoxes );
 		if( selectedBoxes.size() > 1 ) {
-			nEntries = 2;
+			nEntries = 3;
 		}
 		Fl_Menu_Item menu[nEntries + 1];
+		const char* GIMP = "Open with GIMP...";
 		const char* DELETE = "Delete from disc";
 		const char* COMPARE = "Compare selected photos...";
-		menu[0] = { DELETE };
-		if( nEntries == 2 ) {
-			menu[1] = { COMPARE };
+		menu[0] = { GIMP };
+		menu[1] = { DELETE };
+		if( nEntries == 3 ) {
+			menu[2] = { COMPARE };
 		}
-		menu[nEntries == 1 ? 1 : 2] = { 0 };
+		menu[nEntries == 2 ? 2 : 3] = { 0 };
 		const Fl_Menu_Item *m = menu->popup( Fl::event_x(), Fl::event_y(),
 											 0, 0, 0 );
 		if( m ) {
-			if( !strcmp( m->text, DELETE ) ) {
+			if( !strcmp( m->text, GIMP ) ) {
+				openWithGIMP( selectedBoxes );
+			} else if( !strcmp( m->text, DELETE ) ) {
 				int rc = fl_choice( "Really delete the selected photo(s)?",
 						            "  No  ", "Yes", NULL );
 				if( rc == 0 ) {
@@ -228,8 +206,90 @@ private:
 					_folderManager.deleteFile( box->getPhotoPathnFile().c_str() );
 				}
 				readPhotos( _folder.c_str() );
+			} else {
+				//open enlargement dialog
+				int n = selectedBoxes.size();
+				showEnlargementDialog( selectedBoxes.at(0),
+						               (n > 1) ?
+						               selectedBoxes.at(1) : NULL );
 			}
 		}
+	}
+
+	void openWithGIMP( const vector<PhotoBox*>& boxes ) {
+		string command = "gimp ";
+		for( auto box : boxes ) {
+			command.append( box->getPhotoPathnFile() );
+			command.append( " " );
+		}
+		_gimp_handle = popen( command.c_str(), "r");
+		if( !_gimp_handle ) {
+			g_statusbox->setStatusText( "Failed opening GIMP." );
+		}
+	}
+
+	void showEnlargementDialog( PhotoBox* box1, PhotoBox* box2 = NULL ) {
+		string title = box1->getFolder();
+		title.append( ": " );
+		title.append( box1->getFile() );
+		if( box2 ) {
+			title.append( ", " );
+			title.append( box2->getFile() );
+		}
+		FlxDialog dlg( 300, _scroll->y(), 1400, 820,  title.c_str() );
+		dlg.resizable( dlg );
+		FlxRect& rect = dlg.getClientArea();
+
+		//create new PhotoBox(es) to show in the enlargement dialog
+		int n = box2 ? 2 : 1;
+		PhotoBox box1n( rect.x, rect.y, rect.w/n, rect.h );
+		copyAttributes( &box1n, box1 );
+		dlg.add( box1n );
+
+		PhotoBox* box2n = NULL;
+		if( box2 ) {
+			int x = rect.x + box1n.w() + 3;
+			int w = rect.w/2 - 3;
+			box2n = new PhotoBox( x, rect.y, w, rect.h );
+			copyAttributes( box2n, box2 );
+			dlg.add( box2n );
+		}
+
+		//2nd: show dialog
+		if( dlg.show( false ) ) {
+			box1->setSelectedColor( box1n.getSelectedColor() );
+			box1->setMoveToFolder( box1n.getMoveToFolder() );
+			if( box2 ) {
+				box2->setSelectedColor( box2n->getSelectedColor() );
+				box2->setMoveToFolder( box2n->getMoveToFolder() );
+			}
+		}
+
+		//3rd: unset image and rescale it for displaying it in the main window
+		box1n.image( NULL );
+		box1->image()->scale( box1->w(), box1->h(), 1, 1 );
+		box1->redraw();
+		if( box2n ) {
+			box2n->image( NULL );
+			box2->image()->scale( box2->w(), box2->h(), 1, 1 );
+			box2->redraw();
+		}
+	}
+
+	void copyAttributes( PhotoBox* cpy, PhotoBox* orig ) {
+		Fl_Color color = orig->getSelectedColor();
+		if( color ) {
+			cpy->setSelectedColor( orig->getSelectedColor() );
+		} else {
+			const char* moveto = orig->getMoveToFolder();
+			if( moveto ) {
+				cpy->setMoveToFolder( moveto );
+			}
+		}
+		Fl_Image* img = orig->image();
+		Size sz = cpy->getPhotoSize();
+		img->scale( sz.w, sz.h, 1, 1 );
+		cpy->image( img );
 	}
 
 	void addImageFile( const char* folder, const char* filename, const char* datetime ) {
@@ -562,6 +622,7 @@ private:
 	long _usedBytes = 0;
 	FolderManager& _folderManager = FolderManager::inst();
 	string _folder; //current folder whose photos are displayed
+	FILE* _gimp_handle = NULL;
 };
 
 

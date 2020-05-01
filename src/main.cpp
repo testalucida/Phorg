@@ -219,7 +219,6 @@ int main() {
  * todo
  *  - write log on renamings
  *  - show number of photos to load and loading progress in status box
- *  - compare 2 photos in dialog (via context menu)
  *  - rotate photo (via context menu)
  *  - application icon
  */

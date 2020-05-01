@@ -357,6 +357,14 @@ public:
 		}
 	}
 
+	const string& getFolder() const {
+		return _folder;
+	}
+
+	const string& getFile() const {
+		return _file;
+	}
+
 	const string& getPhotoPathnFile() const {
 		_pathnfile = _folder;
 		_pathnfile.append( "/" );
