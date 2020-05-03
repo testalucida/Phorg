@@ -159,6 +159,7 @@ public:
 	}
 
 	void renameFiles() {
+		//todo <1>
 		int resp = fl_choice( "Rename all photos?\n"
 				              "Resulting filenames will be of format\nYYYYMMDD_TTTTTT.jpg",
 							  "No", "Yes", NULL );
@@ -546,6 +547,7 @@ private:
 	 * Move currently shown pictures according user's choices.
 	 */
 	void moveFiles() {
+		//todo <1>
 		if( _folder.empty() ) {
 			g_statusbox->setStatusText( "Nothing to move. No folder opened.", 2 );
 			return;

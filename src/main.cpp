@@ -217,7 +217,10 @@ int main() {
 
 /**
  * todo
- *  - let create folders beyond photos' folder
+ *  - Task 1 ( referenced as <1> )
+ *    - handle write actions on non-writable folders (discs)
+ *    - let user create folders beyond photos' folder
+ *
  *  - move files back
  *  - write log on renamings
  *  - show number of photos to load and loading progress in status box

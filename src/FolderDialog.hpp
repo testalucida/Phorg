@@ -13,6 +13,8 @@
 #include <FL/Fl_Return_Button.H>
 #include <FL/Fl_Button.H>
 #include <FL/Fl_Browser.H>
+//<1>
+#include <FL/Fl_Native_File_Chooser.H>
 //#include <FL/Fl_Check_Button.H>
 #include <fltk_ext/FlxCheckButton.h>
 
@@ -106,7 +108,6 @@ public:
 
 		end();
 		size( this->w(), btn->y() + btn->h() + margin_y );
-		//size( btn->x() + btn->w() + 2*margin_x, btn->y() + btn->h() + 2*margin_y );
 	}
 
 	~FolderDialog() {}
@@ -177,6 +178,14 @@ private:
 			bool garb = ( _cbGarbage->active() && _cbGarbage->value() == 1 );
 			bool good = ( _cbGood->active() &&  _cbGood->value() == 1 );
 			bool dunno = ( _cbDunno->active() && _cbDunno->value() == 1 );
+
+			//todo <1>
+			//check if folder is writable.
+			//If not, show a new FileChooserDialog where user may
+			//choose another (writable) folder.
+			//The garb, good and dunno subfolders will be created in
+			//the chosen write folder.
+
 			(_cfcb)( garb, good, dunno, NULL, _cf_data );
 			if( garb ) {
 				_cbGarbage->deactivate();
@@ -197,6 +206,7 @@ private:
 
 	void doCreateOtherFolderCallback( const char* folder ) {
 		if( _cfcb ) {
+			//<1> FolderManager::onCreateFolder
 			(_cfcb)( false, false, false, folder, _cf_data );
 			_status = "Created folder ";
 			_status.append( folder );
@@ -207,7 +217,26 @@ private:
 	}
 
 	void doCreateOtherFolderCallback() {
-		const char* folder = fl_input( "Enter folder's name: " );
+		//<1>
+		//Replace fl_input by FileChooserDialog and let user choose
+		//any folder and name.
+		//const char* folder = fl_input( "Enter folder's name: " );
+		const char* folder = NULL;
+		Fl_Native_File_Chooser folderChooser( Fl_Native_File_Chooser::BROWSE_DIRECTORY );
+		folderChooser.options( Fl_Native_File_Chooser::NEW_FOLDER );
+		switch ( folderChooser.show() ) {
+		case -1: /*ERROR -- todo*/
+			;
+			break; // ERROR
+		case 1: /*CANCEL*/
+			fl_beep();
+			break; // CANCEL
+		default: // PICKED DIR
+			//get selected folder name
+			folder = folderChooser.filename();
+		}
+		// <1> end
+
 		if( folder ) {
 			doCreateOtherFolderCallback( folder );
 		}
@@ -265,6 +294,12 @@ private:
 
 private:
 	string _currentFolder;
+	//todo <1>
+	// change _currentFolder' meaning: it's the folder to read the photos from
+	// but not necessarily the folder where good, dunno and garbage subfolders
+	// are created.
+	// Instead implement a new folder (string) with meaning "write" folder.
+
 	string _browserLabel = "Existing folders in ";
 	Fl_Browser* _browser = NULL;
 	FlxCheckButton* _cbGarbage = NULL;

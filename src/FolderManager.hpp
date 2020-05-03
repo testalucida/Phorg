@@ -18,6 +18,58 @@
 
 using namespace std;
 
+class FileException : public exception {
+public:
+	FileException( const char* method, const char* name, const char* msg = NULL ) :
+		exception(), _method(method), _name(name), _msg(msg)
+	{}
+
+	~FileException() {}
+
+	virtual const char* what() const noexcept {
+		string what = "FolderManager::";
+		what.append( _method ).append( ": " );
+		what.append( "error on writing " ).append( _name );
+		if( !_msg.empty() ) {
+			what.append( "\n" ).append( _msg );
+		}
+
+		return what.c_str();
+	}
+private:
+	std::string _method;
+	std::string _name;
+	std::string _msg;
+};
+
+class FileExistsException : public FileException {
+public:
+	FileExistsException( const char* method, const char* name, const char* msg = NULL ) :
+		FileException( method, name, msg )
+	{}
+};
+
+class WritePermissionException : public FileException {
+public:
+	WritePermissionException( const char* method, const char* name, const char* msg = NULL ) :
+		FileException( method, name, msg )
+	{}
+};
+
+class ReadOnlyException : public FileException {
+public:
+	ReadOnlyException( const char* method, const char* name, const char* msg = NULL ) :
+		FileException( method, name, msg )
+	{}
+};
+
+class FileWriteError : public FileException {
+public:
+	FileWriteError( const char* method, const char* name, const char* msg = NULL ) :
+			FileException( method, name, msg )
+	{}
+};
+
 enum Sort {
 	SORT_ASC,
 	SORT_DESC,
@@ -98,6 +150,7 @@ public:
 
 //		timer.start();
 		if( rotate ) {
+			//todo <1>  check if folder is writable
 			rotateImages( folder );
 		}
 //		timer.stop();
@@ -130,6 +183,7 @@ public:
 	 */
 	void renameFilesToDatetime( const char* folder ) {
 		for( auto ii : _images ) {
+			//todo <1>
 			if( ii->datetime != "unknown" ) {
 				renameFile( ii->folder, ii->filename, ii->datetime );
 			}
@@ -142,6 +196,7 @@ public:
 	void moveFile( const char* destfolder, const char* srcfolder,
 			       const char* filename )
 	{
+		//todo <1>
 		string current = srcfolder;
 		current.append( "/" );
 		current.append( filename );
@@ -154,8 +209,7 @@ public:
 			throw runtime_error( "FolderManager::moveFile(): " + msg );
 		}
 
-		//todo: change ImageInfo in _images
-		//current = srcfolder;
+		//change ImageInfo in _images
 		for( auto ii : _images ) {
 			if( ii->filename == filename && ii->folder == srcfolder ) {
 				ii->folder = destfolder;
@@ -165,7 +219,13 @@ public:
 	}
 
 	static void onCreateFolders( bool garbage, bool good, bool dunno, const char* other, void* data ) {
+		//<1> called by FolderDialog::doCreateOtherFolderCallback()
 		FolderManager* pThis = (FolderManager*) data;
+		//todo <1>
+		// Logic is here to find either garbage (good, dunno) provided OR other.
+		// Prospectively we have to handle the demand to create garbage, good and dunno within
+		// other
+		// Who is to catch the exceptions thrown by createFolder()???
 		if ( garbage ) {
 			pThis->createFolder( GARBAGE_FOLDER );
 		}
@@ -233,20 +293,52 @@ public:
 	}
 
 	void createFolder( const char* name ) const {
+		//called by FolderManager::onCreateFolders()
 		int temp = umask( 0 );
+		//todo <1>
 		string folder = _folder;
 		folder.append( "/" );
 		folder.append( name );
 		if ( mkdir( folder.c_str(), 0777 ) != 0 ) {
-			string msg = "FolderManager::createFolder(): Error creating folder ";
-			msg.append( name );
-			perror( msg.c_str() );
-			throw runtime_error( msg );
+			//<1>
+			checkErrnoAndThrow( "createFolder", folder.c_str() );
+
+			//<1> end
+
+			//<1>
+//			string msg = "FolderManager::createFolder(): Error creating folder ";
+//			msg.append( name );
+//			perror( msg.c_str() );
+//			throw runtime_error( msg );
+			//<1> end
 		}
 		umask( temp );
 	}
 
 private:
+	//<1>
+	void checkErrnoAndThrow( const char* method,
+						     const char* name,
+							 const char* msg = NULL ) const
+	{
+		switch( errno ) {
+		case EACCES:
+			//write permission is denied on the parent directory of the directory to be created.
+			throw WritePermissionException( method, name, msg );
+		case EEXIST:
+			//named folder exists
+			throw FileExistsException( method, name, msg );
+		case EROFS:
+			//The parent directory resides on a read-only file system
+			throw ReadOnlyException( method, name, msg );
+		default:
+			string err = "errno = ";
+			err.append( to_string( errno ) );
+			throw FileWriteError( method, name, err.c_str() );
+		}
+	}
+	//<1> end
+
 	bool isImageFile( const char *filename ) {
 		my::StringHelper &strh = my::StringHelper::instance();
 		if ( strh.endsWith( filename, "jpg" )
@@ -400,6 +492,7 @@ private:
 		ne.append( "/" );
 		ne.append( filename );
 		if( rename( old.c_str(), ne.c_str() ) != 0 ) {
+			//todo <1>
 			perror( "Error renaming file" );
 			string msg = "Error on renaming file from " + old + " to " + ne;
 			throw runtime_error( "FolderManager::renameFile(): " + msg );
