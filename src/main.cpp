@@ -217,6 +217,7 @@ int main() {
 
 /**
  * todo
+ *  - let create folders beyond photos' folder
  *  - move files back
  *  - write log on renamings
  *  - show number of photos to load and loading progress in status box
