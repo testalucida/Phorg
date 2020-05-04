@@ -80,7 +80,7 @@ public:
 
 	static void onMoveFiles_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
-		pThis->moveFiles();
+		pThis->moveOrCopyFiles();
 	}
 
 	static void onMoveFilesBack_static( Fl_Widget*, void* data ) {
@@ -373,6 +373,7 @@ private:
 
 		//remove and destroy all previous PhotoBoxes
 //		timer.start();
+		_copiedPhotos.clear();
 		removePhotosFromCanvas();
 //		timer.stop();
 //		fprintf( stderr, "time needed for removePhotosFromCanvas: %s\n",
@@ -479,15 +480,15 @@ private:
 		string folder = _writeFolder;
 		folder.append( "/" );
 		string checkfolder = GARBAGE_FOLDER;
-		if( _folderManager.existsFolder( (folder + checkfolder).c_str() ) ) {
+		if( _folderManager.existsFileOrFolder( (folder + checkfolder).c_str() ) ) {
 			dlg->setFolderCheckBoxActive( Folder::GARBAGE, false );
 		}
 		checkfolder = GOOD_FOLDER;
-		if( _folderManager.existsFolder( (folder + checkfolder).c_str() ) ) {
+		if( _folderManager.existsFileOrFolder( (folder + checkfolder).c_str() ) ) {
 			dlg->setFolderCheckBoxActive( Folder::GOOD, false );
 		}
 		checkfolder = DUNNO_FOLDER;
-		if( _folderManager.existsFolder( (folder + checkfolder).c_str() ) ) {
+		if( _folderManager.existsFileOrFolder( (folder + checkfolder).c_str() ) ) {
 			dlg->setFolderCheckBoxActive( Folder::DUNNO, false );
 		}
 
@@ -574,8 +575,9 @@ private:
 		auto itr2 = _photos.begin() + _photoIndexEnd;
 		for( ; itr <= itr2 && itr != _photos.end(); itr++ ) {
 			PhotoInfo* pinfo = (PhotoInfo*)(*itr);
-			if( pinfo->box->getSelectedColor() != 0 ||
-				pinfo->box->getMoveToFolder() != NULL )
+			if( ( pinfo->box->getSelectedColor() != 0 ||
+				pinfo->box->getMoveToFolder() != NULL ) &&
+				!alreadyCopied( pinfo ) )
 			{
 				int rc = fl_choice( "There are earmarked photos on this page.\n"
 						            "Do you want them to be moved to the specified folder(s) "
@@ -585,7 +587,7 @@ private:
 					return false;
 				} else {
 					if( rc == 1 ) {
-						moveFiles();
+						moveOrCopyFiles();
 					}
 					return true;
 				}
@@ -594,6 +596,15 @@ private:
 		}
 		//no earmarks
 		return true;
+	}
+
+	bool alreadyCopied( const PhotoInfo* pinfo ) const {
+		for( auto copied : _copiedPhotos ) {
+			if( copied == pinfo ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	void deletePhotoInfos() {
@@ -616,16 +627,24 @@ private:
 	}
 
 	/**
-	 * Move currently shown pictures according user's choices.
+	 * Move or copy currently shown pictures according user's choices.
+	 * The pictures are moved if the folder containing them is writable, else copied.
 	 */
-	void moveFiles() {
-		//todo <1>
+	void moveOrCopyFiles() {
+		//<1>
+		//check if the containing folder is writeable.
+		//if so, we may move the photos. Elsewise we have to copy.
+		bool mayMove = _folderManager.mayCurrentUserWrite( _folder.c_str() );
+
 		if( _folder.empty() ) {
-			g_statusbox->setStatusText( "Nothing to move. No folder opened.", 2 );
+			g_statusbox->setStatusText( "Nothing to move/copy. No folder opened.", 2 );
 			return;
 		} else {
-			g_statusbox->setStatusText( "Moving files...", 2 );
+			g_statusbox->setStatusText( mayMove ?
+					                    "Moving files..." : "Copying files...",
+										2 );
 		}
+
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 		int nmoved = 0;
 		bool redfolderchecked = false;
@@ -639,12 +658,12 @@ private:
 			PhotoInfo* pinfo = (PhotoInfo*)(*itr);
 			PhotoBox* box = pinfo->box;
 			Fl_Color color = box->getSelectedColor();
-			string destfolder = _folder + "/";
+			string destfolder = _writeFolder + "/";
 			switch( color ) {
 			case FL_RED:
 				if( !redfolderchecked ) {
-					if( !_folderManager.existsFolder(
-							(_folder + "/" + GARBAGE_FOLDER ).c_str() ) )
+					if( !_folderManager.existsFileOrFolder(
+							(_writeFolder + "/" + GARBAGE_FOLDER ).c_str() ) )
 					{
 						fl_alert( "Garbage folder doesn't exist.\n"
 								  "Create it using Toolbutton 'List and create subfolders'" );
@@ -657,8 +676,8 @@ private:
 				break;
 			case FL_YELLOW:
 				if( !yellowfolderchecked ) {
-					if( !_folderManager.existsFolder(
-							(_folder + "/" + DUNNO_FOLDER ).c_str() ) )
+					if( !_folderManager.existsFileOrFolder(
+							(_writeFolder + "/" + DUNNO_FOLDER ).c_str() ) )
 					{
 						fl_alert( "Dunno folder doesn't exist.\n"
 								  "Create it using Toolbutton 'List and create subfolders'" );
@@ -671,8 +690,8 @@ private:
 				break;
 			case FL_GREEN:
 				if( !greenfolderchecked ) {
-					if( !_folderManager.existsFolder(
-							(_folder + "/" + GOOD_FOLDER ).c_str() ) )
+					if( !_folderManager.existsFileOrFolder(
+							(_writeFolder + "/" + GOOD_FOLDER ).c_str() ) )
 					{
 						fl_alert( "Good folder doesn't exist.\n"
 								  "Create it using Toolbutton 'List and create subfolders'" );
@@ -693,12 +712,19 @@ private:
 			}
 			if( !checkerror ) {
 				nmoved++;
-				_folderManager.moveFile( destfolder.c_str(),
-										 srcfolder, pinfo->filename.c_str() );
+				if( mayMove ) {
+					_folderManager.moveFile( destfolder.c_str(),
+											 srcfolder, pinfo->filename.c_str() );
+				} else {
+					_folderManager.copyFile( destfolder.c_str(),
+											srcfolder, pinfo->filename.c_str(),
+											false );
+					_copiedPhotos.push_back( pinfo );
+				}
 			}
 		} //for
 
-		if( !checkerror && nmoved > 0 ) readPhotos( _folder.c_str() );
+		if( !checkerror && mayMove && nmoved > 0 ) readPhotos( _folder.c_str() );
 
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
@@ -721,6 +747,7 @@ private:
 	string _folder; //current folder whose photos are displayed
 	string _writeFolder; //may differ from _folder if _folder is not writable
 	FILE* _gimp_handle = NULL;
+	vector<PhotoInfo*> _copiedPhotos; //copied photos on the page displayed.
 };
 
 

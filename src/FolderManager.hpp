@@ -15,7 +15,6 @@
 #include <algorithm>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <cerrno>
 #include <unistd.h>
 
 using namespace std;
@@ -191,7 +190,7 @@ public:
 		clearImages();
 
 //		timer.start();
-		if( rotate ) {
+		if( rotate && mayCurrentUserWrite( folder ) ) {
 			//todo <1>  check if folder is writable
 			rotateImages( folder );
 		}
@@ -229,6 +228,27 @@ public:
 			if( ii->datetime != "unknown" ) {
 				renameFile( ii->folder, ii->filename, ii->datetime );
 			}
+		}
+	}
+
+	void copyFile( const char* destfolder, const char* srcfolder,
+		           const char* filename, bool overwrite = true )
+	{
+		string src = srcfolder;
+		src.append( "/" );
+		src.append( filename );
+		string dest = destfolder;
+		dest.append( "/" );
+		dest.append( filename );
+		if( !overwrite ) {
+			if( existsFileOrFolder( dest.c_str() ) ) return;
+		}
+		try {
+			std::ifstream orig( src.c_str(), std::ios::binary );
+			std::ofstream cpy( dest.c_str(), std::ios::binary );
+			cpy << orig.rdbuf();
+		} catch( ... ) {
+			throw FileWriteError( "copyFile", dest.c_str(), NULL );
 		}
 	}
 
@@ -304,9 +324,9 @@ public:
 		}
 	}
 
-	/** Checks if the passed folder exists.
+	/** Checks if the passed file or folder exists.
 	 * The complete (absolute) path must be given. */
-	bool existsFolder( const char* folder ) const {
+	bool existsFileOrFolder( const char* folder ) const {
 		struct stat buffer;
 		return ( stat( folder, &buffer) == 0 );
 	}

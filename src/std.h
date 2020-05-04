@@ -13,6 +13,8 @@
 #include <iostream>
 #include <cstdio>
 #include <stdexcept>
+#include <cerrno>
+#include <fstream>
 
 #include <my/StringHelper.h>
 #include <my/timer.h>
