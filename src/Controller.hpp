@@ -62,7 +62,7 @@ public:
 	static void onManageFolders_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
 		if( !pThis->getCurrentFolder().empty() ) {
-			pThis->showFolderDialog();
+			pThis->manageFolders();
 		} else {
 			g_statusbox->setStatusText( "You need to open a folder "
 					                    "before you may create subfolders.");
@@ -108,6 +108,16 @@ public:
 		((Fl_Double_Window*)pThis->_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
 
+	static void onCreateFolders_static( bool garbage, bool good, bool dunno, const char* other, void* data ) {
+		//<1> called by FolderDialog::doCreateOtherFolderCallback()
+		//todo <1>
+		// Logic is here to find either garbage (good, dunno) provided OR other.
+		// Prospectively we have to handle the demand to create garbage, good and dunno within
+		// other
+		Controller* pThis = (Controller*)data;
+		pThis->createFolders( garbage, good, dunno, other );
+	}
+
 	static void onPhotoBoxClicked_static( PhotoBox* box,
 			                              bool rightMouse,
 										  bool doubleClick,
@@ -150,12 +160,44 @@ public:
 
 			_folder.clear();
 			_folder.append( folder );
+			//<1>
+			_writeFolder = _folder;
 		}
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
 
+	/**
+	 * Returns the folder the photos were retrieved from
+	 */
 	const string& getCurrentFolder() const {
 		return _folder;
+	}
+
+	//<1>
+	void createFolders( bool garbage, bool good, bool dunno, const char* other ) {
+		try {
+			if ( garbage ) {
+				_folderManager.createFolder( _writeFolder.c_str(), GARBAGE_FOLDER );
+			}
+			if( good ) {
+				_folderManager.createFolder( _writeFolder.c_str(), GOOD_FOLDER );
+			}
+			if( dunno ) {
+				_folderManager.createFolder( _writeFolder.c_str(), DUNNO_FOLDER );
+			}
+			if( other ) {
+				_folderManager.createFolder( _writeFolder.c_str(), other );
+			}
+		} catch( FileExistsException& ex1 ) {
+			fl_alert( "%s", ex1.what() );
+		} catch( WritePermissionException& ex2 ) {
+			fl_alert( "%s", ex2.what() );
+		} catch( ReadOnlyException& ex3 ) {
+			fl_alert( "%s", ex3.what() );
+		} catch( FileWriteError& err ) {
+			cerr << err.what() << endl;
+			fl_alert( "%s", err.what() );
+		}
 	}
 
 	void renameFiles() {
@@ -411,17 +453,30 @@ private:
 			validateStartIndex();
 			break;
 		}
-
 	}
 
-	void showFolderDialog() {
-		FolderDialog* dlg = new FolderDialog( 100, 100, _folder.c_str() );
-		dlg->setCreateFolderCallback( FolderManager::onCreateFolders,
-				                      &_folderManager );
+	void manageFolders() {
+		bool mayWrite = _folderManager.mayCurrentUserWrite( _writeFolder.c_str() );
+		if( !mayWrite ) {
+			//get another folder to create the subfolders in
+			string msg = "Folder ";
+			msg.append( _writeFolder ).append( " is not writable.\n" ).
+			    append( "Choose or create another folder to move your photos to?" );
+
+			int rc = fl_choice( msg.c_str(), "No thank you", //rc = 0
+					                         "Choose another folder", NULL );
+			if( rc == 0 ) return;
+
+			_writeFolder = getWriteFolder();
+			if( _writeFolder.empty() ) return;
+		}
+
+		FolderDialog* dlg = new FolderDialog( 100, 100, _writeFolder.c_str() );
+		dlg->setCreateFolderCallback( onCreateFolders_static, this );
 		vector<string> folders;
-		_folderManager.getFolders( _folder.c_str(), folders );
+		_folderManager.getFolders( _writeFolder.c_str(), folders );
 		dlg->setFolders( folders );
-		string folder = _folder;
+		string folder = _writeFolder;
 		folder.append( "/" );
 		string checkfolder = GARBAGE_FOLDER;
 		if( _folderManager.existsFolder( (folder + checkfolder).c_str() ) ) {
@@ -438,6 +493,23 @@ private:
 
 		dlg->show( true );
 		delete dlg;
+	}
+
+	string getWriteFolder() {
+		Fl_Native_File_Chooser folderChooser( Fl_Native_File_Chooser::BROWSE_DIRECTORY );
+		string folder;
+		switch ( folderChooser.show() ) {
+		case -1: /*ERROR -- todo*/
+			;
+			break; // ERROR
+		case 1: /*CANCEL*/
+			fl_beep();
+			break; // CANCEL
+		default: // PICKED DIR
+			//get selected folder name
+			folder = folderChooser.filename();
+		}
+		return folder;
 	}
 
 	void readPhotos( const char* folder ) {
@@ -624,7 +696,7 @@ private:
 				_folderManager.moveFile( destfolder.c_str(),
 										 srcfolder, pinfo->filename.c_str() );
 			}
-		}
+		} //for
 
 		if( !checkerror && nmoved > 0 ) readPhotos( _folder.c_str() );
 
@@ -647,6 +719,7 @@ private:
 	long _usedBytes = 0;
 	FolderManager& _folderManager = FolderManager::inst();
 	string _folder; //current folder whose photos are displayed
+	string _writeFolder; //may differ from _folder if _folder is not writable
 	FILE* _gimp_handle = NULL;
 };
 

@@ -187,6 +187,7 @@ private:
 			//the chosen write folder.
 
 			(_cfcb)( garb, good, dunno, NULL, _cf_data );
+
 			if( garb ) {
 				_cbGarbage->deactivate();
 				_browser->add( GARBAGE_FOLDER );
@@ -204,41 +205,17 @@ private:
 		}
 	}
 
-	void doCreateOtherFolderCallback( const char* folder ) {
-		if( _cfcb ) {
-			//<1> FolderManager::onCreateFolder
-			(_cfcb)( false, false, false, folder, _cf_data );
-			_status = "Created folder ";
-			_status.append( folder );
-			_status.append( "." );
-			_browser->add( folder );
-			setStatus( _status.c_str() );
-		}
-	}
-
 	void doCreateOtherFolderCallback() {
-		//<1>
-		//Replace fl_input by FileChooserDialog and let user choose
-		//any folder and name.
-		//const char* folder = fl_input( "Enter folder's name: " );
-		const char* folder = NULL;
-		Fl_Native_File_Chooser folderChooser( Fl_Native_File_Chooser::BROWSE_DIRECTORY );
-		folderChooser.options( Fl_Native_File_Chooser::NEW_FOLDER );
-		switch ( folderChooser.show() ) {
-		case -1: /*ERROR -- todo*/
-			;
-			break; // ERROR
-		case 1: /*CANCEL*/
-			fl_beep();
-			break; // CANCEL
-		default: // PICKED DIR
-			//get selected folder name
-			folder = folderChooser.filename();
-		}
-		// <1> end
-
+		const char* folder = fl_input( "Enter folder's name: " );
 		if( folder ) {
-			doCreateOtherFolderCallback( folder );
+			if( _cfcb ) {
+				(_cfcb)( false, false, false, folder, _cf_data );
+				_status = "Created folder ";
+				_status.append( folder );
+				_status.append( "." );
+				_browser->add( folder );
+				setStatus( _status.c_str() );
+			}
 		}
 	}
 

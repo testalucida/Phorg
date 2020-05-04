@@ -15,31 +15,40 @@
 #include <algorithm>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <cerrno>
+#include <unistd.h>
 
 using namespace std;
 
 class FileException : public exception {
 public:
 	FileException( const char* method, const char* name, const char* msg = NULL ) :
-		exception(), _method(method), _name(name), _msg(msg)
-	{}
+		exception(), _method(method), _name(name)
+	{
+		if( msg ) {
+			_msg.append( msg );
+		}
+	}
 
-	~FileException() {}
+	virtual ~FileException() { cerr << "FileException deleted." << endl; }
 
 	virtual const char* what() const noexcept {
-		string what = "FolderManager::";
-		what.append( _method ).append( ": " );
-		what.append( "error on writing " ).append( _name );
+		_what = "FolderManager::";
+		_what.append( _method ).append( ":\n" );
+		_what.append( getType() ).append( " occured on writing " ).append( _name );
 		if( !_msg.empty() ) {
-			what.append( "\n" ).append( _msg );
+			_what.append( "\n" ).append( _msg );
 		}
 
-		return what.c_str();
+		return _what.c_str();
 	}
+
+	virtual const char* getType() const = 0;
 private:
 	std::string _method;
 	std::string _name;
 	std::string _msg;
+	mutable std::string _what;
 };
 
 class FileExistsException : public FileException {
@@ -47,6 +56,12 @@ public:
 	FileExistsException( const char* method, const char* name, const char* msg = NULL ) :
 		FileException( method, name, msg )
 	{}
+
+	~FileExistsException() { cerr << "FileExistsException deleted." << endl; }
+
+	virtual const char* getType() const {
+		return "FileExistsException";
+	}
 };
 
 class WritePermissionException : public FileException {
@@ -54,6 +69,12 @@ public:
 	WritePermissionException( const char* method, const char* name, const char* msg = NULL ) :
 		FileException( method, name, msg )
 	{}
+
+	~WritePermissionException() { cerr << "WritePermissionException deleted." << endl; }
+
+	virtual const char* getType() const {
+		return "WritePermissionException";
+	}
 };
 
 class ReadOnlyException : public FileException {
@@ -61,6 +82,12 @@ public:
 	ReadOnlyException( const char* method, const char* name, const char* msg = NULL ) :
 		FileException( method, name, msg )
 	{}
+
+	~ReadOnlyException() { cerr << "ReadOnlyException deleted." << endl; }
+
+	virtual const char* getType() const {
+		return "ReadOnlyException";
+	}
 };
 
 class FileWriteError : public FileException {
@@ -68,6 +95,12 @@ public:
 	FileWriteError( const char* method, const char* name, const char* msg = NULL ) :
 			FileException( method, name, msg )
 	{}
+
+	~FileWriteError() { cerr << "FileWriteError deleted." << endl; }
+
+	virtual const char* getType() const {
+		return "FileWriteError";
+	}
 };
 
 enum Sort {
@@ -101,6 +134,15 @@ public:
 			pThis = new FolderManager();
 		}
 		return *pThis;
+	}
+
+	bool mayCurrentUserWrite( const char* folder ) {
+//		char user[256];
+//		int rc = getlogin_r( user, 256 );
+//		if( rc == 0 ) {
+			return( access( folder, W_OK ) == 0 );
+//		}
+//		return false;
 	}
 
 	const char* chooseFolder() {
@@ -218,27 +260,28 @@ public:
 		}
 	}
 
-	static void onCreateFolders( bool garbage, bool good, bool dunno, const char* other, void* data ) {
-		//<1> called by FolderDialog::doCreateOtherFolderCallback()
-		FolderManager* pThis = (FolderManager*) data;
-		//todo <1>
-		// Logic is here to find either garbage (good, dunno) provided OR other.
-		// Prospectively we have to handle the demand to create garbage, good and dunno within
-		// other
-		// Who is to catch the exceptions thrown by createFolder()???
-		if ( garbage ) {
-			pThis->createFolder( GARBAGE_FOLDER );
-		}
-		if( good ) {
-			pThis->createFolder( GOOD_FOLDER );
-		}
-		if( dunno ) {
-			pThis->createFolder( DUNNO_FOLDER );
-		}
-		if( other ) {
-			pThis->createFolder( other );
-		}
-	}
+	//<1> shifted into Controller class
+//	static void onCreateFolders( bool garbage, bool good, bool dunno, const char* other, void* data ) {
+//		//<1> called by FolderDialog::doCreateOtherFolderCallback()
+//		FolderManager* pThis = (FolderManager*) data;
+//		//todo <1>
+//		// Logic is here to find either garbage (good, dunno) provided OR other.
+//		// Prospectively we have to handle the demand to create garbage, good and dunno within
+//		// other
+//		// Who is to catch the exceptions thrown by createFolder()???
+//		if ( garbage ) {
+//			pThis->createFolder( GARBAGE_FOLDER );
+//		}
+//		if( good ) {
+//			pThis->createFolder( GOOD_FOLDER );
+//		}
+//		if( dunno ) {
+//			pThis->createFolder( DUNNO_FOLDER );
+//		}
+//		if( other ) {
+//			pThis->createFolder( other );
+//		}
+//	}
 
 	void getFolders( const char* parent, vector<string>& folders ) const {
 		DIR *dir;
@@ -292,17 +335,28 @@ public:
 		}
 	}
 
-	void createFolder( const char* name ) const {
+	/**
+	 * Creates a subfolder named folder in folder parent.
+	 * folder must only be the name of the subfolder not a complete path.
+	 */
+	void createFolder( const char* parent, const char* folder ) {
+		string newfolder = parent;
+		newfolder.append( "/" ).append( folder );
+		createFolder( newfolder.c_str() );
+	}
+
+	void createFolder( const char* pathnfile /*<1> name*/ ) const {
 		//called by FolderManager::onCreateFolders()
 		int temp = umask( 0 );
-		//todo <1>
-		string folder = _folder;
-		folder.append( "/" );
-		folder.append( name );
-		if ( mkdir( folder.c_str(), 0777 ) != 0 ) {
+		//<1>
+		//complete path must be given.
+		//string folder = _folder;
+//		folder.append( "/" );
+//		folder.append( name );
+		cerr << "going to create folder " << pathnfile << endl;
+		if ( mkdir( pathnfile, 0777 ) != 0 ) {
 			//<1>
-			checkErrnoAndThrow( "createFolder", folder.c_str() );
-
+			checkErrnoAndThrow( "createFolder", pathnfile );
 			//<1> end
 
 			//<1>
