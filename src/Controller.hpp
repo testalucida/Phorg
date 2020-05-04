@@ -80,7 +80,7 @@ public:
 
 	static void onMoveFiles_static( Fl_Widget*, void* data ) {
 		Controller* pThis = (Controller*) data;
-		pThis->moveOrCopyFiles();
+		pThis->moveOrCopyFiles( true );
 	}
 
 	static void onMoveFilesBack_static( Fl_Widget*, void* data ) {
@@ -91,21 +91,7 @@ public:
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
 		g_statusbox->setStatusText( "Changing page...", 2 );
 		Controller* pThis = (Controller*)data;
-		((Fl_Double_Window*)pThis->_scroll->parent())->cursor( FL_CURSOR_WAIT );
-		Fl::check(); //give FLTK a little time to change cursor
-		if( !pThis->checkEarmarks() ) return;
-		string label;
-		label.append( btn->label() );
-		if( label == SYMBOL_NEXT ) {
-			pThis->browseNextPage();
-		} else if( label == SYMBOL_LAST ) {
-			pThis->browseLastPage();
-		} else if( label == SYMBOL_PREVIOUS ) {
-			pThis->browsePreviousPage();
-		} else {
-			pThis->browseFirstPage();
-		}
-		((Fl_Double_Window*)pThis->_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
+		pThis->changePage( (Fl_Button*)btn);
 	}
 
 	static void onCreateFolders_static( bool garbage, bool good, bool dunno, const char* other, void* data ) {
@@ -215,6 +201,32 @@ public:
 	}
 
 private:
+
+	void changePage( Fl_Button* btn ) {
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
+		Fl::check(); //give FLTK a little time to change cursor
+		if( checkEarmarks() ) {
+			int rc = fl_choice( "There are earmarked photos on this page.\n"
+								"Do you want them to be moved to the specified folder(s) "
+								"before paging or discard the earmarks?",
+								"     Cancel     ", "   Move photos   ", "Discard earmarks" );
+			if( rc == 1 ) {
+				moveOrCopyFiles( false );
+			}
+		}
+		string label;
+		label.append( btn->label() );
+		if( label == SYMBOL_NEXT ) {
+			browseNextPage();
+		} else if( label == SYMBOL_LAST ) {
+			browseLastPage();
+		} else if( label == SYMBOL_PREVIOUS ) {
+			browsePreviousPage();
+		} else {
+			browseFirstPage();
+		}
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
+	}
 
 	void showPhotoContextMenu( vector<PhotoBox*>& selectedBoxes ) {
 		Fl_Menu_Item menu[6];
@@ -390,6 +402,7 @@ private:
 //		timer.start();
 		auto itr = _photos.begin() + _photoIndexStart;
 		int idx = _photoIndexStart;
+		//fprintf( stderr, "******* layoutPhotos page %d *****************\n", (int)page );
 		for(  ; itr != _photos.end() && idx <= _photoIndexEnd; itr++, idx++ ) {
 			if( n > 2 ) { //start next row
 				if( ++rows > 3 ) break;
@@ -406,6 +419,7 @@ private:
 										  pinfo->filename.c_str(),
 										  pinfo->datetime.c_str() );
 				loadPhoto( pinfo->box );
+				//fprintf( stderr, "Box instantiated: %s\n", pinfo->filename.c_str() );
 			}
 			_scroll->add( pinfo->box );
 			X += ( _box_w + _spacing_x );
@@ -579,23 +593,11 @@ private:
 				pinfo->box->getMoveToFolder() != NULL ) &&
 				!alreadyCopied( pinfo ) )
 			{
-				int rc = fl_choice( "There are earmarked photos on this page.\n"
-						            "Do you want them to be moved to the specified folder(s) "
-						            "before paging or discard the earmarks?",
-									"     Cancel     ", "   Move photos   ", "Discard earmarks" );
-				if( rc == 0 ) { //Cancel
-					return false;
-				} else {
-					if( rc == 1 ) {
-						moveOrCopyFiles();
-					}
-					return true;
-				}
-
+				return true;
 			}
 		}
 		//no earmarks
-		return true;
+		return false;
 	}
 
 	bool alreadyCopied( const PhotoInfo* pinfo ) const {
@@ -630,7 +632,7 @@ private:
 	 * Move or copy currently shown pictures according user's choices.
 	 * The pictures are moved if the folder containing them is writable, else copied.
 	 */
-	void moveOrCopyFiles() {
+	void moveOrCopyFiles( bool readAfterMoving ) {
 		//<1>
 		//check if the containing folder is writeable.
 		//if so, we may move the photos. Elsewise we have to copy.
@@ -653,10 +655,20 @@ private:
 		bool checkerror = false;
 		const char* srcfolder = _folder.c_str();
 		auto itr = _photos.begin() + _photoIndexStart;
-		auto itrmax = itr + _photoIndexEnd;
-		for( ; itr != _photos.end() &&  itr <= itrmax && !checkerror; itr++ ) {
+		auto itrmax = itr + ( _photoIndexEnd - _photoIndexStart );
+		fprintf( stderr, "moveOrCopyFiles: photoIndexStart / photoIndexEnd: %d / %d\n",
+						       _photoIndexStart, _photoIndexEnd );
+		//test due to not traceable bug:
+		int i = 0;
+		////////////
+		for( ; itr != _photos.end() &&  itr <= itrmax && !checkerror; itr++, i++ ) {
 			PhotoInfo* pinfo = (PhotoInfo*)(*itr);
 			PhotoBox* box = pinfo->box;
+//			fprintf( stderr, "\titerating %s\n", pinfo->filename.c_str() );
+//			if( !box ) {
+//				fprintf( stderr, "box is NULL: %s, index = %d\n", pinfo->filename.c_str(), i );
+//				continue;
+//			}
 			Fl_Color color = box->getSelectedColor();
 			string destfolder = _writeFolder + "/";
 			switch( color ) {
@@ -724,7 +736,7 @@ private:
 			}
 		} //for
 
-		if( !checkerror && mayMove && nmoved > 0 ) readPhotos( _folder.c_str() );
+		if( readAfterMoving && !checkerror && mayMove && nmoved > 0 ) readPhotos( _folder.c_str() );
 
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
