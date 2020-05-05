@@ -17,6 +17,14 @@
 
 using namespace std;
 
+enum Sort {
+	SORT_ASC,
+	SORT_DESC,
+	SORT_NONE
+};
+
+static Sort _sortDirection = Sort::SORT_ASC;
+
 class Controller {
 private:
 
@@ -143,8 +151,6 @@ public:
 
 			_toolbar->setManageFoldersButtonEnabled( true );
 			_toolbar->setRenameFilesButtonEnabled( true );
-
-
 		}
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
@@ -527,7 +533,7 @@ private:
 	 * datetime info from EXIF block.
 	 * 2nd: Rotates photos as neede by a call to FolderManager::rotate().
 	 * 3rd: Sorts the photos in the _photos vector by datetime.
-	 * 4th: The PhotoBox object in each PhotoInfo object will be provided on demand
+	 * Note: The PhotoBox object in each PhotoInfo object will be provided on demand
 	 * for only the page to be displayed
 	 */
 	void readPhotos( /*const char* folder*/ ) {
@@ -535,6 +541,7 @@ private:
 		clearImages();
 		_folderManager.getImages( _photos );
 		_folderManager.rotateImages();
+		sortImages( Sort::SORT_ASC );
 		layoutPhotos( Page::FIRST );
 	}
 
@@ -565,9 +572,9 @@ private:
 		return ( i1->filename < i2->filename );
 	}
 
-	void sortImages( vector<PhotoInfo*> images, Sort sortDirection ) {
+	void sortImages( Sort sortDirection ) {
 		_sortDirection = sortDirection;
-		sort( images.begin(), images.end(), compare );
+		sort( _photos.begin(), _photos.end(), compare );
 	}
 
 	inline void validateEndIndex() {
@@ -633,14 +640,6 @@ private:
 		return false;
 	}
 
-//	void deletePhotoBoxes() {
-//		for( auto pinfo : _photos ) {
-//			//deleting a PhotoBox will result in deleting of its
-//			//contained Fl_Image object.
-//			if( pinfo->box ) delete pinfo->box;
-//		}
-//	}
-
 	void adjustPageButtons() {
 		_toolbar->setAllPageButtonsEnabled( false );
 		if( _photoIndexStart > 0 ) {
@@ -688,11 +687,6 @@ private:
 		for( ; itr != _photos.end() &&  itr <= itrmax && !checkerror; itr++ ) {
 			PhotoInfo* pinfo = (PhotoInfo*)(*itr);
 			PhotoBox* box = pinfo->box;
-//			fprintf( stderr, "\titerating %s\n", pinfo->filename.c_str() );
-//			if( !box ) {
-//				fprintf( stderr, "box is NULL: %s, index = %d\n", pinfo->filename.c_str(), i );
-//				continue;
-//			}
 			Fl_Color color = box->getSelectedColor();
 			string destfolder = _writeFolder + "/";
 			switch( color ) {
@@ -778,18 +772,19 @@ private:
 	}
 
 	void removeFromPhotos( vector<PhotoInfo*>& to_remove  ) {
-		for( auto itr = _photos.begin(); itr != _photos.end(); ) {
+		for( auto itr = _photos.begin();
+			 itr != _photos.end() && to_remove.size() > 0;
+			 itr++ )
+		{
 			PhotoInfo* pi = *itr;
 			for( auto itr2 = to_remove.begin(); itr2 != to_remove.end(); itr2++ ) {
 				PhotoInfo* pi2 = *itr2;
 				if( pi == pi2 ) {
 					delete pi;
-					itr = _photos.erase( itr );
+					itr = _photos.erase( itr ) - 1;
 					itr2 = to_remove.erase( itr2 );
 					_photoIndexEnd--;
 					break;
-				} else {
-					itr++;
 				}
 			} //inner for
 		} //outer for

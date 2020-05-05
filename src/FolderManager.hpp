@@ -103,20 +103,6 @@ public:
 	}
 };
 
-enum Sort {
-	SORT_ASC,
-	SORT_DESC,
-	SORT_NONE
-};
-
-static Sort _sortDirection = Sort::SORT_ASC;
-
-//struct ImageInfo {
-//	string folder;
-//	string filename;
-//	string datetime;
-//};
-
 ////////////////////////////////////////////////////////////
 ///////////////   FolderManager  ///////////////////////////
 ////////////////////////////////////////////////////////////
@@ -186,35 +172,7 @@ public:
 	 * No png files.
 	 */
 	void getImages( vector<PhotoInfo*>& images ) {
-//		fprintf( stderr, "*********** clocking start in getImages ************\n" );
-//		my::Timer timer;
-		//clearImages();
-
-//		timer.start();
-//		if( rotate && mayCurrentUserWrite() ) {
-//			//todo <1>  check if folder is writable
-//			rotateImages();
-//		}
-//		timer.stop();
-//		fprintf( stderr, "time needed for rotateImages: %s\n",
-//				         timer.durationToString());
-
-//		timer.start();
 		collectImageInfos( images );
-//		timer.stop();
-//		fprintf( stderr, "time needed for collectImageInfos: %s\n",
-//						         timer.durationToString());
-
-//		timer.start();
-//		if( sort != Sort::SORT_NONE ) {
-//			sortImages( sort );
-//		}
-//		timer.stop();
-//		fprintf( stderr, "time needed for sortImages: %s\n",
-//						         timer.durationToString());
-//
-//		fprintf( stderr, "*********** getImages: clocking end ************\n" );
-		//return _images;
 	}
 
 	void rotateImages( /*const char* folder*/ ) {
@@ -223,7 +181,7 @@ public:
 		command.append( "/*.*" );
 		int rc = system( command.c_str() );
 		if( rc != 0 ) {
-			//we may not throw here because jhead gives an error 'no such file' if
+			//we must not throw here because jhead gives an error 'no such file' if
 			//folder is empty.
 			//throw runtime_error( "FolderManager::rotateImages(): Rotation failed." );
 		}
@@ -268,15 +226,6 @@ public:
 			string msg = "Error on moving file from " + current + " to " + dest;
 			throw runtime_error( "FolderManager::moveFile(): " + msg );
 		}
-
-		//change ImageInfo in _images
-		//todo <2>: erase from _images
-//		for( auto ii : _images ) {
-//			if( ii->filename == filename && ii->folder == srcfolder ) {
-//				ii->folder = destfolder;
-//				return;
-//			}
-//		}
 	}
 
 	/**
@@ -330,21 +279,6 @@ public:
 			msg.append( pathnfile );
 			throw runtime_error( msg );
 		}
-
-//		// erase corresponding ImageInfo from vector _images
-//		string pafi = pathnfile;
-//		string path;
-//		string filename;
-//		splitPathnfile( pafi, path, filename );
-//		//<2>
-//		for( auto itr = _images.begin(); itr != _images.end(); itr++ ) {
-//			ImageInfo* ii = *itr;
-//			if( ii->folder == path && ii->filename == filename ) {
-//				_images.erase( itr );
-//				delete ii;
-//				return;
-//			}
-//		}
 	}
 
 	/**
@@ -360,23 +294,10 @@ public:
 	void createFolder( const char* pathnfile /*<1> name*/ ) const {
 		//called by FolderManager::onCreateFolders()
 		int temp = umask( 0 );
-		//<1>
-		//complete path must be given.
-		//string folder = _folder;
-//		folder.append( "/" );
-//		folder.append( name );
 		cerr << "going to create folder " << pathnfile << endl;
 		if ( mkdir( pathnfile, 0777 ) != 0 ) {
 			//<1>
 			checkErrnoAndThrow( "createFolder", pathnfile );
-			//<1> end
-
-			//<1>
-//			string msg = "FolderManager::createFolder(): Error creating folder ";
-//			msg.append( name );
-//			perror( msg.c_str() );
-//			throw runtime_error( msg );
-			//<1> end
 		}
 		umask( temp );
 	}
