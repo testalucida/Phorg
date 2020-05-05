@@ -370,14 +370,6 @@ private:
 		cpy->image( img );
 	}
 
-//	void addImageFile( const char* folder, const char* filename, const char* datetime ) {
-//		PhotoInfo* pinfo = new PhotoInfo;
-//		pinfo->folder.append( folder );
-//		pinfo->filename.append( filename );
-//		pinfo->datetime.append( datetime );
-//		_photos.push_back( pinfo );
-//	}
-
 	void layoutPhotos( Page page ) {
 //		fprintf( stderr, "*********** clocking start in layoutPhotos ************\n" );
 //		my::Timer timer;
@@ -429,6 +421,8 @@ private:
 //						         timer.durationToString());
 		adjustPageButtons();
 		_scroll->redraw();
+
+		_currentPage = page;
 //		fprintf( stderr, "*********** layoutPhotos: clocking end ************\n" );
 	}
 
@@ -663,7 +657,7 @@ private:
 	 * Move or copy currently shown pictures according user's choices.
 	 * The pictures are moved if the folder containing them is writable, else copied.
 	 */
-	void moveOrCopyFiles( bool readAfterMoving ) {
+	void moveOrCopyFiles( bool layoutAfterMoving ) {
 		//<1>
 		//check if the containing folder is writeable.
 		//if so, we may move the photos. Elsewise we have to copy.
@@ -687,8 +681,8 @@ private:
 		const char* srcfolder = _folder.c_str();
 		auto itr = _photos.begin() + _photoIndexStart;
 		auto itrmax = itr + ( _photoIndexEnd - _photoIndexStart );
-		fprintf( stderr, "moveOrCopyFiles: photoIndexStart / photoIndexEnd: %d / %d\n",
-						       _photoIndexStart, _photoIndexEnd );
+//		fprintf( stderr, "moveOrCopyFiles: photoIndexStart / photoIndexEnd: %d / %d\n",
+//						       _photoIndexStart, _photoIndexEnd );
 
 		vector<PhotoInfo*> to_remove;
 		for( ; itr != _photos.end() &&  itr <= itrmax && !checkerror; itr++ ) {
@@ -765,6 +759,7 @@ private:
 											false );
 					//As we copy only in case of a not writeable folder
 					//we virtually remove this photo from its folder
+					//by removing it from the photos vector
 					to_remove.push_back( pinfo );
 					_copiedPhotos.push_back( pinfo );
 				}
@@ -774,8 +769,10 @@ private:
 		if( to_remove.size() > 0 ) {
 			removeFromPhotos( to_remove );
 		}
-		//if( readAfterMoving && !checkerror && mayMove && nmoved > 0 )
-			//readPhotos();
+
+		if( layoutAfterMoving ) {
+			layoutPhotos( _currentPage );
+		}
 
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
@@ -789,6 +786,7 @@ private:
 					delete pi;
 					itr = _photos.erase( itr );
 					itr2 = to_remove.erase( itr2 );
+					_photoIndexEnd--;
 					break;
 				} else {
 					itr++;
@@ -824,6 +822,7 @@ private:
 	std::vector<PhotoInfo*> _photos; //contains all photo infos of current folder.
 	int _photoIndexStart = -1;
 	int _photoIndexEnd = -1;
+	Page _currentPage = Page::FIRST;
 	long _usedBytes = 0;
 	FolderManager& _folderManager = FolderManager::inst();
 	string _folder; //current folder whose photos are displayed
