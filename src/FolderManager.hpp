@@ -10,6 +10,7 @@
 
 #include "std.h"
 #include "const.h"
+#include "PhotoInfo.h"
 #include <FL/Fl_Native_File_Chooser.H>
 #include <stdexcept>
 #include <algorithm>
@@ -110,12 +111,15 @@ enum Sort {
 
 static Sort _sortDirection = Sort::SORT_ASC;
 
-struct ImageInfo {
-	string folder;
-	string filename;
-	string datetime;
-};
+//struct ImageInfo {
+//	string folder;
+//	string filename;
+//	string datetime;
+//};
 
+////////////////////////////////////////////////////////////
+///////////////   FolderManager  ///////////////////////////
+////////////////////////////////////////////////////////////
 class FolderManager {
 private:
 	FolderManager() {
@@ -124,7 +128,7 @@ private:
 	}
 public:
 	~FolderManager() {
-		clearImages();
+		//clearImages();
 	}
 
 	static FolderManager& inst() {
@@ -144,6 +148,12 @@ public:
 //		return false;
 	}
 
+	/**
+	 * Lets user choose a folder using Fl_Native_File_Chooser.
+	 * (Ugly! Shouldn't be done by a management class.)
+	 * A call to chooseFolder() sets the folder
+	 * this FolderManager is working with.
+	 */
 	const char* chooseFolder() {
 		// Show file chooser
 		if( !_folder.empty() ) {
@@ -171,63 +181,51 @@ public:
 	}
 
 	/**
-	 * Gets all jpg, jpeg, JPG and JPEG files in the given folder.
+	 * Gets all jpg, jpeg, JPG and JPEG files within the folder this
+	 * FolderManager is working with.
 	 * No png files.
-	 * Rotate jpeg if wanted and necessary and sort them if wanted
-	 * ascending or descending according to  Date/Time info in the EXIF block.
-	 * This is based on the jpg informations extracted by jhead (which reads
-	 * the EXIF block of each photo).
-	 * Note:
-	 * By each call of this method all PathnFile elements
-	 * of the previously returned vector  will be deleted.
 	 */
-	vector<ImageInfo*>& getImages( const char* folder,
-			                       bool rotate = true,
-								   Sort sort = Sort::SORT_ASC )
-    {
+	void getImages( vector<PhotoInfo*>& images ) {
 //		fprintf( stderr, "*********** clocking start in getImages ************\n" );
 //		my::Timer timer;
-		clearImages();
+		//clearImages();
 
 //		timer.start();
-		if( rotate && mayCurrentUserWrite( folder ) ) {
-			//todo <1>  check if folder is writable
-			rotateImages( folder );
-		}
+//		if( rotate && mayCurrentUserWrite() ) {
+//			//todo <1>  check if folder is writable
+//			rotateImages();
+//		}
 //		timer.stop();
 //		fprintf( stderr, "time needed for rotateImages: %s\n",
 //				         timer.durationToString());
 
 //		timer.start();
-		collectImageInfos( folder );
+		collectImageInfos( images );
 //		timer.stop();
 //		fprintf( stderr, "time needed for collectImageInfos: %s\n",
 //						         timer.durationToString());
 
 //		timer.start();
-		if( sort != Sort::SORT_NONE ) {
-			sortImages( sort );
-		}
+//		if( sort != Sort::SORT_NONE ) {
+//			sortImages( sort );
+//		}
 //		timer.stop();
 //		fprintf( stderr, "time needed for sortImages: %s\n",
 //						         timer.durationToString());
 //
 //		fprintf( stderr, "*********** getImages: clocking end ************\n" );
-		return _images;
+		//return _images;
 	}
 
-	/**
-	 * Renames all photo files in the given folder so that their filename
-	 * consists of the datetime token the photo.
-	 * FolderManager::getImages() must have been called before
-	 * otherwise no files will be renamed.
-	 */
-	void renameFilesToDatetime( const char* folder ) {
-		for( auto ii : _images ) {
-			//todo <1>
-			if( ii->datetime != "unknown" ) {
-				renameFile( ii->folder, ii->filename, ii->datetime );
-			}
+	void rotateImages( /*const char* folder*/ ) {
+		string command = "jhead -autorot ";
+		command.append( _folder.c_str() );
+		command.append( "/*.*" );
+		int rc = system( command.c_str() );
+		if( rc != 0 ) {
+			//we may not throw here because jhead gives an error 'no such file' if
+			//folder is empty.
+			//throw runtime_error( "FolderManager::rotateImages(): Rotation failed." );
 		}
 	}
 
@@ -272,36 +270,29 @@ public:
 		}
 
 		//change ImageInfo in _images
-		for( auto ii : _images ) {
-			if( ii->filename == filename && ii->folder == srcfolder ) {
-				ii->folder = destfolder;
-				return;
+		//todo <2>: erase from _images
+//		for( auto ii : _images ) {
+//			if( ii->filename == filename && ii->folder == srcfolder ) {
+//				ii->folder = destfolder;
+//				return;
+//			}
+//		}
+	}
+
+	/**
+	 * Renames all photo files in the given folder so that their filename
+	 * consists of the datetime token the photo.
+	 */
+	void renameFilesToDatetime( vector<PhotoInfo*>& images ) {
+		//<2>
+		for ( auto ii : images ) {
+			//todo <1>
+			if ( ii->datetime != "unknown" ) {
+				renameFile( ii->folder, ii->filename, ii->datetime );
 			}
 		}
 	}
 
-	//<1> shifted into Controller class
-//	static void onCreateFolders( bool garbage, bool good, bool dunno, const char* other, void* data ) {
-//		//<1> called by FolderDialog::doCreateOtherFolderCallback()
-//		FolderManager* pThis = (FolderManager*) data;
-//		//todo <1>
-//		// Logic is here to find either garbage (good, dunno) provided OR other.
-//		// Prospectively we have to handle the demand to create garbage, good and dunno within
-//		// other
-//		// Who is to catch the exceptions thrown by createFolder()???
-//		if ( garbage ) {
-//			pThis->createFolder( GARBAGE_FOLDER );
-//		}
-//		if( good ) {
-//			pThis->createFolder( GOOD_FOLDER );
-//		}
-//		if( dunno ) {
-//			pThis->createFolder( DUNNO_FOLDER );
-//		}
-//		if( other ) {
-//			pThis->createFolder( other );
-//		}
-//	}
 
 	void getFolders( const char* parent, vector<string>& folders ) const {
 		DIR *dir;
@@ -340,19 +331,20 @@ public:
 			throw runtime_error( msg );
 		}
 
-		// erase corresponding ImageInfo from vector _images
-		string pafi = pathnfile;
-		string path;
-		string filename;
-		splitPathnfile( pafi, path, filename );
-		for( auto itr = _images.begin(); itr != _images.end(); itr++ ) {
-			ImageInfo* ii = *itr;
-			if( ii->folder == path && ii->filename == filename ) {
-				_images.erase( itr );
-				delete ii;
-				return;
-			}
-		}
+//		// erase corresponding ImageInfo from vector _images
+//		string pafi = pathnfile;
+//		string path;
+//		string filename;
+//		splitPathnfile( pafi, path, filename );
+//		//<2>
+//		for( auto itr = _images.begin(); itr != _images.end(); itr++ ) {
+//			ImageInfo* ii = *itr;
+//			if( ii->folder == path && ii->filename == filename ) {
+//				_images.erase( itr );
+//				delete ii;
+//				return;
+//			}
+//		}
 	}
 
 	/**
@@ -428,32 +420,22 @@ private:
 		return false;
 	}
 
-	void clearImages() {
-		for( auto img : _images ) {
-			delete img;
-		}
-		_images.clear();
-	}
-
-	void rotateImages( const char* folder ) {
-		string command = "jhead -autorot ";
-		command.append( folder );
-		command.append( "/*.*" );
-		int rc = system( command.c_str() );
-		if( rc != 0 ) {
-			//we may not throw here because jhead gives an error 'no such file' if
-			//folder is empty.
-			//throw runtime_error( "FolderManager::rotateImages(): Rotation failed." );
-		}
-	}
-
-	void collectImageInfos( const char* folder ) {
+	/**
+	 * Creates a command calling jhead.
+	 * jhead will read the jpg files in the folder this FolderManager
+	 * is working with and extract the EXIF infos.
+	 * We collect those infos by using a pipe.
+	 */
+	void collectImageInfos( vector<PhotoInfo*>& images ) {
 		string command = "jhead ";
-		command.append( folder );
+		command.append( _folder.c_str() );
 		command.append( "/*.*" );
 		FILE* pipe;
 		pipe = popen( command.c_str(), "r" );
-		if( !pipe ) throw std::runtime_error( "FolderManager::collectImageInfos(): popen() failed!" );
+		if( !pipe ) {
+			throw runtime_error( "FolderManager::collectImageInfos(): "
+					             "popen() failed!" );
+		}
 		char buffer[128];
 		string result = "";
 		try {
@@ -466,21 +448,26 @@ private:
 		}
 		pclose( pipe );
 
-		provideImageInfos( result );
+		//get the interesting infos out of result
+		provideImageInfos( result, images );
 	}
 
-	void provideImageInfos( string& result ) {
+	/**
+	 * Extracts the result of a jhead call and creates ImageInfo objects
+	 * for each EXIF block.
+	 */
+	void provideImageInfos( string& result, vector<PhotoInfo*>& images ) {
 		string pathnfile;
 		size_t eolAfterFile = -1;
 		while( ( eolAfterFile =
 				 getPathnFile( result, pathnfile, eolAfterFile+1 ) ) != string::npos )
 		{
-			ImageInfo* ii = new ImageInfo;
+			PhotoInfo* ii = new PhotoInfo;
 			splitPathnfile( pathnfile, ii->folder, ii->filename );
 			getDateTimeInfo( result, ii->datetime, eolAfterFile + 1 );
 //			fprintf( stderr, "ii filename and datetime: %s -- %s\n",
 //					ii->filename.c_str(), ii->datetime.c_str() );
-			_images.push_back( ii );
+			images.push_back( ii );
 		}
 	}
 
@@ -587,25 +574,11 @@ private:
 		newname.append( ".jpg" );
 	}
 
-	void sortImages( Sort sortDirection ) {
-		_sortDirection = sortDirection;
-		sort( _images.begin(), _images.end(), compare );
-	}
-
-	static bool compare( const ImageInfo* i1, const ImageInfo* i2 ) {
-		if( i1->datetime > i2->datetime ) {
-			return _sortDirection == Sort::SORT_ASC ? false : true;
-		}
-		if( i1->datetime < i2->datetime ) {
-			return _sortDirection == Sort::SORT_ASC ? true : false;
-		}
-		return ( i1->filename < i2->filename );
-	}
 
 private:
 	Fl_Native_File_Chooser _fileChooser;
 	std::string _folder;
-	std::vector<ImageInfo*> _images;
+//	std::vector<ImageInfo*> _images;
 };
 
 

@@ -12,18 +12,13 @@
 #include "FolderDialog.hpp"
 #include "gui.hpp"
 #include "std.h"
+#include "PhotoInfo.h"
 #include <fltk_ext/FlxDialog.h>
 
 using namespace std;
 
 class Controller {
 private:
-	struct PhotoInfo {
-		std::string folder;
-		std::string filename;
-		std::string datetime;
-		PhotoBox* box = NULL;
-	};
 
 	enum Page {
 		NEXT,
@@ -41,7 +36,7 @@ public:
 	}
 
 	~Controller() {
-		deletePhotoInfos();
+		//deletePhotoInfos();
 	}
 
 	static void onCanvasResize_static( int x, int y, int w, int h, void* data ) {
@@ -130,6 +125,11 @@ public:
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 		const char* folder = _folderManager.chooseFolder();
 		if( folder ) {
+			_folder.clear();
+			_folder.append( folder );
+			//<1>
+			_writeFolder = _folder;
+
 			string title = "Photo Organization";
 			title.append( ": " );
 			title.append( folder );
@@ -139,15 +139,12 @@ public:
 					                    ". This may take a while..." );
 
 			/*get photos from selected dictionary*/
-			readPhotos( folder );
+			readPhotos();
 
 			_toolbar->setManageFoldersButtonEnabled( true );
 			_toolbar->setRenameFilesButtonEnabled( true );
 
-			_folder.clear();
-			_folder.append( folder );
-			//<1>
-			_writeFolder = _folder;
+
 		}
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
@@ -194,8 +191,9 @@ public:
 		if( resp == 1 ) {
 			g_statusbox->setStatusText( "Renaming photos will take a while..." );
 			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
-			_folderManager.renameFilesToDatetime( _folder.c_str() );
-			readPhotos( _folder.c_str() );
+			_folderManager.renameFilesToDatetime( _photos );
+			//readPhotos();
+			layoutPhotos( Page::FIRST );
 			((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 		}
 	}
@@ -255,8 +253,9 @@ private:
 				if( rc == 1 ) {
 					for( auto box : selectedBoxes ) {
 						_folderManager.deleteFile( box->getPhotoPathnFile().c_str() );
+						removeFromPhotos( box->getFile() );
 					}
-					readPhotos( _folder.c_str() );
+					layoutPhotos( Page::FIRST );
 				}
 			} else if( !strcmp( m->text, ROTATE_CLOCK ) ) {
 				rotate( selectedBoxes, 90 );
@@ -371,13 +370,13 @@ private:
 		cpy->image( img );
 	}
 
-	void addImageFile( const char* folder, const char* filename, const char* datetime ) {
-		PhotoInfo* pinfo = new PhotoInfo;
-		pinfo->folder.append( folder );
-		pinfo->filename.append( filename );
-		pinfo->datetime.append( datetime );
-		_photos.push_back( pinfo );
-	}
+//	void addImageFile( const char* folder, const char* filename, const char* datetime ) {
+//		PhotoInfo* pinfo = new PhotoInfo;
+//		pinfo->folder.append( folder );
+//		pinfo->filename.append( filename );
+//		pinfo->datetime.append( datetime );
+//		_photos.push_back( pinfo );
+//	}
 
 	void layoutPhotos( Page page ) {
 //		fprintf( stderr, "*********** clocking start in layoutPhotos ************\n" );
@@ -527,23 +526,54 @@ private:
 		return folder;
 	}
 
-	void readPhotos( const char* folder ) {
-		reset();
-		vector<ImageInfo*>& imagefiles = _folderManager.getImages( folder );
-		for( auto img : imagefiles ) {
-			addImageFile( img->folder.c_str(), img->filename.c_str(), img->datetime.c_str() );
-		}
-
+	/**
+	 * 1st: Reads all photos from selected folder into vector _photos by calling
+	 * FolderManager::getImages().
+	 * FolderManager will provide folder and file infos including
+	 * datetime info from EXIF block.
+	 * 2nd: Rotates photos as neede by a call to FolderManager::rotate().
+	 * 3rd: Sorts the photos in the _photos vector by datetime.
+	 * 4th: The PhotoBox object in each PhotoInfo object will be provided on demand
+	 * for only the page to be displayed
+	 */
+	void readPhotos( /*const char* folder*/ ) {
+		//reset();
+		clearImages();
+		_folderManager.getImages( _photos );
+		_folderManager.rotateImages();
 		layoutPhotos( Page::FIRST );
 	}
 
-	void reset() {
-		removePhotosFromCanvas();
-		//_photos.clear();
-		deletePhotoInfos();
-		_usedBytes = 0;
-		_photoIndexStart = -1;
-		_photoIndexEnd = -1;
+	void clearImages() {
+		for( auto img : _photos ) {
+			delete img;
+		}
+		_photos.clear();
+	}
+
+//	void reset() {
+//		//clear the currently displayed photos
+//		removePhotosFromCanvas();
+//		//delete PhotoBox objects due to memory issues
+//		//deletePhotoBoxes();
+//		_usedBytes = 0;
+//		_photoIndexStart = -1;
+//		_photoIndexEnd = -1;
+//	}
+
+	static bool compare( const PhotoInfo* i1, const PhotoInfo* i2 ) {
+		if( i1->datetime > i2->datetime ) {
+			return _sortDirection == Sort::SORT_ASC ? false : true;
+		}
+		if( i1->datetime < i2->datetime ) {
+			return _sortDirection == Sort::SORT_ASC ? true : false;
+		}
+		return ( i1->filename < i2->filename );
+	}
+
+	void sortImages( vector<PhotoInfo*> images, Sort sortDirection ) {
+		_sortDirection = sortDirection;
+		sort( images.begin(), images.end(), compare );
 	}
 
 	inline void validateEndIndex() {
@@ -609,12 +639,13 @@ private:
 		return false;
 	}
 
-	void deletePhotoInfos() {
-		for( auto pinfo : _photos ) {
-			delete pinfo;
-		}
-		_photos.clear();
-	}
+//	void deletePhotoBoxes() {
+//		for( auto pinfo : _photos ) {
+//			//deleting a PhotoBox will result in deleting of its
+//			//contained Fl_Image object.
+//			if( pinfo->box ) delete pinfo->box;
+//		}
+//	}
 
 	void adjustPageButtons() {
 		_toolbar->setAllPageButtonsEnabled( false );
@@ -658,10 +689,9 @@ private:
 		auto itrmax = itr + ( _photoIndexEnd - _photoIndexStart );
 		fprintf( stderr, "moveOrCopyFiles: photoIndexStart / photoIndexEnd: %d / %d\n",
 						       _photoIndexStart, _photoIndexEnd );
-		//test due to not traceable bug:
-		int i = 0;
-		////////////
-		for( ; itr != _photos.end() &&  itr <= itrmax && !checkerror; itr++, i++ ) {
+
+		vector<PhotoInfo*> to_remove;
+		for( ; itr != _photos.end() &&  itr <= itrmax && !checkerror; itr++ ) {
 			PhotoInfo* pinfo = (PhotoInfo*)(*itr);
 			PhotoBox* box = pinfo->box;
 //			fprintf( stderr, "\titerating %s\n", pinfo->filename.c_str() );
@@ -727,19 +757,59 @@ private:
 				if( mayMove ) {
 					_folderManager.moveFile( destfolder.c_str(),
 											 srcfolder, pinfo->filename.c_str() );
+					//earmark as to be removed
+					to_remove.push_back( pinfo );
 				} else {
 					_folderManager.copyFile( destfolder.c_str(),
 											srcfolder, pinfo->filename.c_str(),
 											false );
+					//As we copy only in case of a not writeable folder
+					//we virtually remove this photo from its folder
+					to_remove.push_back( pinfo );
 					_copiedPhotos.push_back( pinfo );
 				}
 			}
 		} //for
 
-		if( readAfterMoving && !checkerror && mayMove && nmoved > 0 ) readPhotos( _folder.c_str() );
+		if( to_remove.size() > 0 ) {
+			removeFromPhotos( to_remove );
+		}
+		//if( readAfterMoving && !checkerror && mayMove && nmoved > 0 )
+			//readPhotos();
 
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
+
+	void removeFromPhotos( vector<PhotoInfo*>& to_remove  ) {
+		for( auto itr = _photos.begin(); itr != _photos.end(); ) {
+			PhotoInfo* pi = *itr;
+			for( auto itr2 = to_remove.begin(); itr2 != to_remove.end(); itr2++ ) {
+				PhotoInfo* pi2 = *itr2;
+				if( pi == pi2 ) {
+					delete pi;
+					itr = _photos.erase( itr );
+					itr2 = to_remove.erase( itr2 );
+					break;
+				} else {
+					itr++;
+				}
+			} //inner for
+		} //outer for
+	}
+
+	void removeFromPhotos( const string& filename ) {
+		for( auto itr = _photos.begin(); itr != _photos.end(); itr++ ) {
+			PhotoInfo* pinfo = *itr;
+			if( pinfo->filename == filename ) {
+				delete pinfo;
+				_photos.erase( itr );
+				break;
+			}
+		}
+		throw runtime_error( "Controller::removeFromPhotos(filename):\n"
+				             "PhotoInfo object not found." );
+	}
+
 private:
 	Scroll* _scroll;
 	ToolBar* _toolbar;
@@ -750,7 +820,7 @@ private:
 
 	int _photosPerRow = 3;
 	int _maxRows = 4;
-
+	//vector<ImageInfo*> _imageInfos; //contains all ImageInfo objects of current folder.
 	std::vector<PhotoInfo*> _photos; //contains all photo infos of current folder.
 	int _photoIndexStart = -1;
 	int _photoIndexEnd = -1;
