@@ -87,9 +87,9 @@ public:
 		pThis->moveOrCopyFiles( true );
 	}
 
-	static void onMoveFilesBack_static( Fl_Widget*, void* data ) {
+	static void onMoveFilesBack_static( Fl_Widget* w, void* data ) {
 		Controller* pThis = (Controller*) data;
-
+		pThis->moveFilesBack();
 	}
 
 	static void onChangePage_static( Fl_Widget* btn, void* data ) {
@@ -491,8 +491,8 @@ private:
 			msg.append( _writeFolder ).append( " is not writable.\n" ).
 			    append( "Choose or create another folder to move your photos to?" );
 
-			int rc = fl_choice( msg.c_str(), "No thank you", //rc = 0
-					                         "Choose another folder", 0 );
+			int rc = fl_choice( "%s", "No thank you", //rc = 0
+					            "Choose another folder", 0, msg.c_str() );
 			if( rc == 0 ) return;
 
 			_writeFolder = getWriteFolder();
@@ -673,20 +673,68 @@ private:
 		}
 	}
 
+	void moveFilesBack() {
+		if( _folder.empty() ) {
+			g_statusbox->setStatusText( "Nothing to move back. No folder opened.", 2 );
+			return;
+		} else {
+			bool mayMove = _folderManager.mayCurrentUserWrite( _folder.c_str() );
+			if( !mayMove ) {
+				g_statusbox->setStatusTextV( "sss", _folder.c_str(),
+						                     " is not writeable.\n",
+											 "Can't move pictures back to that folder." );
+				return;
+			} else {
+				g_statusbox->setStatusText( "Moving files back...", 2 );
+			}
+
+		}
+
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
+
+		vector<string> folders;
+		getFoldersToMoveBackFrom( folders );
+
+		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
+	}
+
+	void getFoldersToMoveBackFrom( vector<string>& folders ) {
+		vector<string> subfolders;
+		//get all subfolders
+		_folderManager.getFolders( _writeFolder.c_str(), subfolders );
+		int cnt = subfolders.size();
+		int spacing_y = 10;
+		int h = 25;
+		int dlg_h = cnt * h + (cnt + 1 ) * spacing_y + 50;
+		FlxDialog dlg( _scroll->top_window()->x() + Fl::event_x(),
+				       _scroll->top_window()->y() + Fl::event_y() + 50,
+					   400, dlg_h, "Choose Folders from where to move pics back" );
+		Fl_Group* grp = dlg.createClientAreaGroup( FL_FLAT_BOX, FL_LIGHT2 );
+		int x = grp->x() + 20;
+		int y = grp->y() + spacing_y;
+		FlxCheckButton* btn[cnt];
+		for( int i = 0; i < cnt; i++ ) {
+			btn[i] = new FlxCheckButton( x, y, 200, h, subfolders.at( i ).c_str() );
+			btn[i]->clear_visible_focus();
+			y += ( h + spacing_y );
+		}
+
+		int rc = dlg.show( false );
+	}
+
 	/**
 	 * Move or copy currently shown pictures according user's choices.
 	 * The pictures are moved if the folder containing them is writable, else copied.
 	 */
 	void moveOrCopyFiles( bool layoutAfterMoving ) {
-		//<1>
-		//check if the containing folder is writeable.
-		//if so, we may move the photos. Elsewise we have to copy.
-		bool mayMove = _folderManager.mayCurrentUserWrite( _folder.c_str() );
-
+		bool mayMove = true;
 		if( _folder.empty() ) {
 			g_statusbox->setStatusText( "Nothing to move/copy. No folder opened.", 2 );
 			return;
 		} else {
+			//check if the containing folder is writeable.
+			//if so, we may move the photos. Elsewise we have to copy.
+			mayMove = _folderManager.mayCurrentUserWrite( _folder.c_str() );
 			g_statusbox->setStatusText( mayMove ?
 					                    "Moving files..." : "Copying files...",
 										2 );

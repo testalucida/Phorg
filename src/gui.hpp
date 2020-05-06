@@ -850,6 +850,24 @@ public:
 		}
 	}
 
+	void setMoveButtonEnabled( bool enable ) {
+		const Tool& t = getTool( ToolId::MOVE_FILES );
+		if( enable ) {
+			t.btn->activate();
+		} else {
+			t.btn->deactivate();
+		}
+	}
+
+	void setMoveBackButtonEnabled( bool enable ) {
+		const Tool& t = getTool( ToolId::MOVE_FILES_BACK );
+		if( enable ) {
+			t.btn->activate();
+		} else {
+			t.btn->deactivate();
+		}
+	}
+
 	/** inserts a resizable dummy boy which prevents buttons from
 	 * resizing when the application window is resized.
 	 * Call this method after having added all toolbar buttons.
