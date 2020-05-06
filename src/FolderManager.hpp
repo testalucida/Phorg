@@ -208,6 +208,15 @@ public:
 		}
 	}
 
+	/** Move .jpg files from srcfolder to destfolder */
+	void moveJpegFiles( const char* destfolder, const char* srcfolder ) {
+		vector<string> jpegs;
+		getJpegFiles( srcfolder, jpegs );
+		for( auto jpeg : jpegs ) {
+			moveFile( destfolder, srcfolder, jpeg.c_str() );
+		}
+	}
+
 	/**
 	 * Moves file filename from srcfolder to destfolder
 	 */
@@ -325,6 +334,52 @@ private:
 		}
 	}
 	//<1> end
+
+
+	void getJpegFiles( const char* folder, vector<string>& files ) {
+		DIR *dir;
+		struct dirent *ent;
+		if ( (dir = opendir( folder )) != NULL ) {
+			while ( (ent = readdir( dir )) != NULL ) {
+				if( ent->d_type == DT_REG ) {
+					if( isJpeg( ent->d_name ) ) {
+						files.push_back( ent->d_name );
+					}
+				}
+			}
+
+			closedir( dir );
+		} else {
+			/* could not open directory */
+			perror( "Error reading directories" );
+		}
+	}
+
+	bool isJpeg( const char* file ) {
+		int len = strlen( file );
+		const char* pmax = file + len;
+
+		const char* p = file;
+		for( ; p < pmax && *p != '.'; p++ );
+		//p now pointing to '.'
+		p++;
+
+		if( p >= pmax || !( *p == 'j' || *p == 'J' ) ) return false;
+		p++;
+		if( p >= pmax || !( *p == 'p' || *p == 'P' ) ) return false;
+		p++;
+		if( p < pmax ) {
+			if ( *p == 'e' || *p == 'E' ) {
+				p++;
+				if( p >= pmax ) return false;
+			}
+			if( *p == 'g' || *p == 'G' ) {
+				if( *(p+1) == 0x00 ) return true;
+			}
+		}
+
+		return false;
+	}
 
 	bool isImageFile( const char *filename ) {
 		my::StringHelper &strh = my::StringHelper::instance();

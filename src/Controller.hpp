@@ -684,17 +684,21 @@ private:
 						                     " is not writeable.\n",
 											 "Can't move pictures back to that folder." );
 				return;
-			} else {
-				g_statusbox->setStatusText( "Moving files back...", 2 );
 			}
-
 		}
 
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_WAIT );
 
 		vector<string> folders;
 		getFoldersToMoveBackFrom( folders );
-
+		for( auto folder : folders ) {
+			string src = _writeFolder + "/" + folder;
+			g_statusbox->setStatusTextV("ss", "Moving files from folder ",
+					                          folder.c_str() );
+			_folderManager.moveJpegFiles( _folder.c_str(), src.c_str() );
+		}
+		g_statusbox->setStatusText( "Done. Read photos anew." );
+		readPhotos();
 		((Fl_Double_Window*)_scroll->parent())->cursor( FL_CURSOR_DEFAULT );
 	}
 
@@ -719,7 +723,13 @@ private:
 			y += ( h + spacing_y );
 		}
 
-		int rc = dlg.show( false );
+		if( dlg.show( false ) == 1 ) {
+			for( int i = 0; i < cnt; i++ ) {
+				if( btn[i]->value() == 1 ) {
+					folders.push_back( btn[i]->label() );
+				}
+			}
+		}
 	}
 
 	/**

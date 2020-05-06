@@ -202,13 +202,29 @@ int test() {
 //	processLargeObject( *lo );
 //}
 
+//
+//int testJpeg() {
+//	string s = "abc.";
+//	const int n = 8;
+//	const char* end[n] = {"jpegi", "jpeig", "jpg", "JPIG", "JPEG", "jpeg", "pg", "jpgm" };
+//	for( int i = 0; i < n; i++ ) {
+//		string file = s;
+//		file.append( end[i] );
+//		bool rc = isJpeg( file.c_str() );
+//		fprintf( stderr, "%s is %s a jpg file.\n", file.c_str(), rc ? "" : "not" );
+//	}
+//
+//
+//	return 1;
+//}
+
 /**
  * Application to get organization into your photos' folders.
  * View photo, delete it or move or copy it into another folder quickly.
  * Sort them in a conveniant way based on their names or date of taking.
  */
 int main() {
-	//return test();
+	//return testJpeg();
 	checkMemory();
 	// additional linker options: -lfltk_images -ljpeg -lpng
 	fl_register_images();
