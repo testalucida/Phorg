@@ -20,6 +20,7 @@
 #include <fltk_ext/FlxStatusBox.h>
 #include "std.h"
 #include "global.h"
+#include "IFolderInfoProvider.h"
 #include <cmath>
 
 class ImageFactory {
@@ -201,7 +202,6 @@ private:
 
 }; //class Box
 
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 const long MAX_MEM_USAGE = 800000000;
 //const long MAX_MEM_USAGE = 100000000;
@@ -209,8 +209,9 @@ const long MAX_MEM_USAGE = 800000000;
 class PhotoBox : public Fl_Group { // Fl_Box {
 public:
 	PhotoBox( int x, int y, int w, int h,
+			IFolderInfoProvider& folderInfo,
 			const char* folder = NULL, const char* file = NULL, const char* datetime = NULL ) :
-		Fl_Group( x, y, w, h )
+		          Fl_Group( x, y, w, h ), _folderInfo(folderInfo)
 	{
 		if( folder ) _folder.append( folder );
 		if( file ) {
@@ -465,7 +466,7 @@ private:
 
 	static void onBurgerMenu_static( Fl_Widget* w, void* data ) {
 		PhotoBox* box = (PhotoBox*)data;
-		box->showBurgerMenu( (Fl_Button*)w );
+		box->onShowBurgerMenu( (Fl_Button*)w );
 	}
 
 	void onToggled( Fl_Toggle_Button* btn ) {
@@ -478,11 +479,9 @@ private:
 		}
 	}
 
-	void showBurgerMenu( Fl_Button* burger ) {
+	void onShowBurgerMenu( Fl_Button* burger ) {
 		vector<string> folders;
-		FolderManager& fm = FolderManager::inst();
-		//fm.getFolders( fm.getCurrentFolder().c_str(), folders );
-		fm.getFolders( "/home/martin/Projects/cpp/Phorg/testphotos", folders );
+		_folderInfo.getMoveToSubfolders( folders );
 		Fl_Menu_Item menu[folders.size()+1];
 		for( int i = 0, imax = folders.size(); i < imax; i++ ) {
 			menu[i] = { folders.at(i).c_str() };
@@ -564,6 +563,7 @@ private:
 	}
 
 private:
+    IFolderInfoProvider& _folderInfo;
 	Fl_Toggle_Button* _btnRed = NULL;
 	Fl_Toggle_Button* _btnYellow = NULL;
 	Fl_Toggle_Button* _btnGreen = NULL;

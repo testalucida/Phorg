@@ -13,6 +13,7 @@
 #include "gui.hpp"
 #include "std.h"
 #include "PhotoInfo.h"
+#include "IFolderInfoProvider.h"
 #include <fltk_ext/FlxDialog.h>
 
 using namespace std;
@@ -25,7 +26,7 @@ enum Sort {
 
 static Sort _sortDirection = Sort::SORT_ASC;
 
-class Controller {
+class Controller : public IFolderInfoProvider {
 private:
 
 	enum Page {
@@ -189,8 +190,20 @@ public:
 		}
 	}
 
+	/** implement from IFolderInfoProvider */
+	virtual void getMoveToSubfolders( std::vector<string>& items ) {
+		_folderManager.getFolders( _writeFolder.c_str(), items );
+	}
+
 	void renameFiles() {
-		//todo <1>
+		//todo <1> test
+		if( !_folderManager.mayCurrentUserWrite( _folder.c_str() ) ) {
+			string msg = _folder;
+			msg.append( " is not writable.\nCan't rename files." );
+			fl_alert( "%s", msg.c_str() );
+			return;
+		}
+
 		int resp = fl_choice( "Rename all photos?\n"
 				              "Resulting filenames will be of format\nYYYYMMDD_TTTTTT.jpg",
 							  "No", "Yes", NULL );
@@ -326,7 +339,7 @@ private:
 
 		//create new PhotoBox(es) to show in the enlargement dialog
 		int n = box2 ? 2 : 1;
-		PhotoBox box1n( rect.x, rect.y, rect.w/n, rect.h );
+		PhotoBox box1n( rect.x, rect.y, rect.w/n, rect.h, *this );
 		copyAttributes( &box1n, box1 );
 		dlg.add( box1n );
 
@@ -334,7 +347,7 @@ private:
 		if( box2 ) {
 			int x = rect.x + box1n.w() + 3;
 			int w = rect.w/2 - 3;
-			box2n = new PhotoBox( x, rect.y, w, rect.h );
+			box2n = new PhotoBox( x, rect.y, w, rect.h, *this );
 			copyAttributes( box2n, box2 );
 			dlg.add( box2n );
 		}
@@ -412,6 +425,7 @@ private:
 				if( _usedBytes > MAX_MEM_USAGE ) break;
 
 				pinfo->box = new PhotoBox( X, Y, _box_w, _box_h,
+										  *this,
 						                  pinfo->folder.c_str(),
 										  pinfo->filename.c_str(),
 										  pinfo->datetime.c_str() );
@@ -478,7 +492,7 @@ private:
 			    append( "Choose or create another folder to move your photos to?" );
 
 			int rc = fl_choice( msg.c_str(), "No thank you", //rc = 0
-					                         "Choose another folder", NULL );
+					                         "Choose another folder", 0 );
 			if( rc == 0 ) return;
 
 			_writeFolder = getWriteFolder();
@@ -540,7 +554,14 @@ private:
 		//reset();
 		clearImages();
 		_folderManager.getImages( _photos );
-		_folderManager.rotateImages();
+		if( _folderManager.mayCurrentUserWrite( _folder.c_str() ) ) {
+			_folderManager.rotateImages();
+		} else {
+			g_statusbox->
+			   setStatusTextV( "ss", _folder.c_str(),
+					           " is not writeable.\n"
+					           "Hence the images will not be rotated." );
+		}
 		sortImages( Sort::SORT_ASC );
 		layoutPhotos( Page::FIRST );
 	}

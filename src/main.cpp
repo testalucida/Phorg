@@ -116,6 +116,10 @@ static void drawImage( Fl_Widget* w, void* data ) {
 }
 
 int test() {
+	class Dummy : public IFolderInfoProvider {
+	public:
+		virtual void getMoveToSubfolders( std::vector<string>& ) {}
+	};
 	Fl_Double_Window *win =	new Fl_Double_Window(200, 200, 400, 420, "TEST" );
 	win->box( FL_FLAT_BOX );
 	win->color( FL_LIGHT2 );
@@ -123,9 +127,11 @@ int test() {
 	//int spacing_x = 5;
 	int margin_y = 10;
 
+	Dummy* dummy = new Dummy;
 	PhotoBox* box = new PhotoBox( margin_x, margin_y,
 								  win->w() - 2*margin_x,
 								  win->h() - 4*margin_y,
+								  *dummy,
 								  "/home/martin/Projects/cpp/Phorg/testphotos", "20200102_092128.jpg" );
 	TestImage* img = new TestImage( "/home/martin/Projects/cpp/Phorg/testphotos/20200102_092128.jpg" );
 	img->scale( box->w(), box->h(), 1, 1 );
@@ -158,6 +164,43 @@ int test() {
 	win->show();
 	return Fl::run();
 }
+//
+//#include <memory>
+//
+//class MyString : public std::string {
+//public:
+//	virtual ~MyString() {
+//		fprintf( stderr, "MyString destructed.\n" );
+//	}
+//};
+//
+//typedef int hhh;
+//typedef std::unique_ptr<MyString> StringPtr;
+//typedef std::vector<StringPtr> StringPtrVector;
+//typedef std::unique_ptr<StringPtrVector> StringPtrVectorPtr;
+//
+//class LargeObject {
+//public:
+//    void doSomething() const {
+//    	fprintf( stderr, "do something.\n" );
+//    }
+//};
+//
+//void processLargeObject(const LargeObject& lo) {
+//	StringPtrVectorPtr vec( new StringPtrVector );
+//	StringPtr p1( new MyString );
+//	//vec->push_back( p1 );
+//
+//	std::vector<StringPtr> myvec;
+//	myvec.push_back( &p1 );
+//	lo.doSomething();
+//}
+//
+//void testptr() {
+//	std::unique_ptr<LargeObject> lo( new LargeObject );
+//
+//	processLargeObject( *lo );
+//}
 
 /**
  * Application to get organization into your photos' folders.
