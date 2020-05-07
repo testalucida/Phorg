@@ -89,10 +89,13 @@ public:
 	}
 
 	~Box() {
+		//cerr << "~Box...";
 		Fl_Image* img;
 		if( ( img = image() ) != NULL ) {
 			delete img;
+			//cerr << " and Image";
 		}
+		//cerr << endl;
 	}
 
 	int handle( int evt ) {
@@ -109,9 +112,6 @@ public:
 			if( _zoom > 1.0 )  {
 				this->top_window()->cursor( FL_CURSOR_MOVE );
 				Fl::check();
-//				float zoomfactor = _zoom - 1;
-//				_img_x = _img_x - round( ( (float)_img_x * zoomfactor ) );
-//				_img_y = _img_y - round( ( (float)_img_y * zoomfactor ) );
 			}
 			return 1;
 		case FL_RELEASE:
@@ -284,6 +284,7 @@ public:
 	}
 
 	~PhotoBox() {
+		//cerr << "~PhotoBox" << endl;
 	}
 
 	Size getPhotoSize() const {

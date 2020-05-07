@@ -448,7 +448,7 @@ private:
 
 	/** Remove and destroy all photos from canvas (scroll area). */
 	void removePhotosFromCanvas() {
-		_scroll->clear();
+		_scroll->clear(); //deletes all PhotoBox objects and its Fl_Images
 		for( auto pinfo : _photos ) {
 			pinfo->box = NULL;
 		}
@@ -875,7 +875,7 @@ private:
 			if( pinfo->filename == filename ) {
 				delete pinfo;
 				_photos.erase( itr );
-				break;
+				return;
 			}
 		}
 		throw runtime_error( "Controller::removeFromPhotos(filename):\n"

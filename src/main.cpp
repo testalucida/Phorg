@@ -276,17 +276,8 @@ int main() {
 
 /**
  * todo
- *  - Task 2 <2>
- *    - remove _images from FolderManager or hold it sync
- *
- *  - call FolderManager::getImages only once
- *    (from Controller::readPhotos())
- *
- *  - Task 1 ( referenced as <1> )
- *    - handle write actions on non-writable folders (discs)
- *    - let user create folders beyond photos' folder
- *
- *  - move files back
+ *  - bugfix: zooming doesn't work properly
+ *  - Enlargement dialog: click to next/previous picture
  *  - write log on renamings
  *  - show number of photos to load and loading progress in status box
  *  - application icon
