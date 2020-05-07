@@ -892,6 +892,7 @@ public:
 			int x = left.x + 10;
 			int w = right.x - x;
 			_statusbox = new FlxStatusBox( x, y() + 2, w, h()-4 );
+			_statusbox->labelcolor( FL_WHITE );
 			add( _statusbox );
 			resizable( _statusbox );
 			g_statusbox = _statusbox;
