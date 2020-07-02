@@ -303,6 +303,7 @@ private:
 	}
 
 	void rotate( const vector<PhotoBox*>& boxes, int degrees ) {
+		//sudo apt-get install imagemagick
 		for( auto box : boxes ) {
 			string command = "convert ";
 			command.append( box->getPhotoPathnFile() );
